@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文単英検アプリ</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f4f6f8; margin: 0; padding: 16px; display: flex; justify-content: center; }
+    .app-container { max-width: 480px; width: 100%; background: #fff; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    h1 { font-size: 1.2rem; text-align: center; color: #333; margin-top: 0; }
+    .progress { font-size: 0.85rem; color: #666; text-align: right; margin-bottom: 12px; }
+    .card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .word-title { font-size: 1.5rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
+    .pronunciation { font-size: 0.9rem; color: #666; font-weight: normal; margin-top: 4px; }
+    .sentence { margin-top: 12px; font-size: 0.95rem; line-height: 1.4; color: #444; background: #fff; padding: 10px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; }
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; }
+    .btn-option { background: #fff; border: 1px solid #ccc; text-align: left; color: #333; }
+    .btn-option:active { background: #e8f0fe; }
+    .btn-correct { background: #e6f4ea !important; border-color: #34a853 !important; color: #137333 !important; }
+    .btn-wrong { background: #fce8e6 !important; border-color: #ea4335 !important; color: #c5221f !important; }
+    .btn-action { background: #1a73e8; color: #fff; margin-top: 16px; }
+    .btn-speech { background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 0 8px; }
+    .feedback { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; }
+    .feedback-correct { background: #e6f4ea; color: #137333; }
+    .feedback-wrong { background: #fce8e6; color: #c5221f; }
+    .hidden { display: none; }
+    .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <div id="loading">データを読み込み中...</div>
+
+  <div id="quiz-area" class="hidden">
+    <h1 id="unit-title">単元 1</h1>
+    <div class="progress" id="progress-text">1 / 10</div>
+
+    <!-- カード画面 -->
+    <div class="card">
+      <div class="word-title">
+        <span id="card-word">word</span>
+        <button class="btn-speech" onclick="speakCurrentWord()">🔊</button>
+      </div>
+      <div class="pronunciation" id="card-pron">発音</div>
+      <div class="sentence" id="card-sentence">例文</div>
+    </div>
+
+    <!-- 解答エリア（リーディング） -->
+    <div id="reading-options"></div>
+
+    <!-- 解答エリア（ライティング） -->
+    <div id="writing-area" class="hidden">
+      <button class="btn btn-action" id="show-answer-btn" onclick="revealWritingAnswer()">答えを確認する</button>
+      <div id="writing-answer-box" class="hidden">
+        <div style="margin: 12px 0; font-weight: bold; text-align: center; font-size: 1.2rem;" id="writing-target-word"></div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-wrong" onclick="answerWriting(false)">❌ 書けなかった</button>
+          <button class="btn btn-correct" onclick="answerWriting(true)">⭕️ 書けた！</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- フィードバック ＆ 次へボタン -->
+    <div id="feedback" class="feedback"></div>
+    <button id="next-btn" class="btn btn-action hidden" onclick="nextQuestion()">次の問題へ ➔</button>
+  </div>
+
+  <!-- 最終：長文画面 -->
+  <div id="passage-area" class="hidden">
+    <h1>📖 今日の長文・和訳</h1>
+    <div class="reading-passage" id="passage-text"></div>
+    <button class="btn btn-action" onclick="location.reload()">もう一度やる / 次の単元へ</button>
+  </div>
+</div>
+
+<script>
+  // GASのAPI URL
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzhE3wLguu31bWIVq9XpXgDBUWQ4gXALsigejfq9Q_ZykZjiO86c4bMP18jqbYOiaeoNg/exec";
+
+  let quizData = null;
+  let questions = [];
+  let currentIndex = 0;
+  let userResults = [];
+
+  // 音声再生（ブラウザ標準TTS）
+  function speakCurrentWord() {
+    if (!questions[currentIndex]) return;
+    const uttr = new SpeechSynthesisUtterance(questions[currentIndex].word);
+    uttr.lang = 'en-US';
+    speechSynthesis.speak(uttr);
+  }
+
+  // データ初期化
+  async function init() {
+    try {
+      const res = await fetch(GAS_API_URL);
+      quizData = await res.json();
+
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('quiz-area').classList.remove('hidden');
+      document.getElementById('unit-title').innerText = `【文単英検】単元 ${quizData.unitNo}`;
+
+      // 全単語をまとめる
+      questions = [...quizData.readingWords, ...quizData.writingWords];
+      showQuestion();
+    } catch (e) {
+      document.getElementById('loading').innerText = "データの読み込みに失敗しました。";
+    }
+  }
+
+  // 出題
+  function showQuestion() {
+    if (currentIndex >= questions.length) {
+      finishQuiz();
+      return;
+    }
+
+    const q = questions[currentIndex];
+    document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
+    document.getElementById('card-word').innerText = q.quizType === 'ライティング' ? '???' : q.word;
+    document.getElementById('card-pron').innerText = q.quizType === 'ライティング' ? '' : q.pronunciation;
+    
+    // ライティング時は例文の英単語部分をマスク
+    if (q.quizType === 'ライティング') {
+      const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      document.getElementById('card-sentence').innerText = q.sentence.replace(reg, '( ?? )') + `\n(${q.translation})`;
+    } else {
+      document.getElementById('card-sentence').innerText = q.sentence;
+    }
+
+    // 表示切り替え
+    document.getElementById('feedback').style.display = 'none';
+    document.getElementById('next-btn').classList.add('hidden');
+
+    if (q.quizType === 'ライティング') {
+      document.getElementById('reading-options').classList.add('hidden');
+      document.getElementById('writing-area').classList.remove('hidden');
+      document.getElementById('show-answer-btn').classList.remove('hidden');
+      document.getElementById('writing-answer-box').classList.add('hidden');
+    } else {
+      document.getElementById('writing-area').classList.add('hidden');
+      document.getElementById('reading-options').classList.remove('hidden');
+      renderReadingOptions(q);
+    }
+  }
+
+  // 4択選択肢の描画
+  function renderReadingOptions(q) {
+    const container = document.getElementById('reading-options');
+    container.innerHTML = '';
+
+    q.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-option';
+      btn.innerText = opt;
+      btn.onclick = () => answerReading(opt, q.meaning, btn);
+      container.appendChild(btn);
+    });
+  }
+
+  // リーディング回答（即時判定）
+  function answerReading(selected, correct, btn) {
+    const isCorrect = (selected === correct);
+    userResults.push({ word: questions[currentIndex].word, isCorrect: isCorrect });
+
+    // スピーカー音声を鳴らす
+    speakCurrentWord();
+
+    // 選択肢の着色
+    const buttons = document.querySelectorAll('#reading-options button');
+    buttons.forEach(b => {
+      b.disabled = true;
+      if (b.innerText === correct) b.classList.add('btn-correct');
+    });
+    if (!isCorrect) btn.classList.add('btn-wrong');
+
+    // フィードバック表示
+    const fb = document.getElementById('feedback');
+    fb.style.display = 'block';
+    fb.className = `feedback ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`;
+    fb.innerText = isCorrect ? '⭕️ 正解！' : `❌ 不正解... 正解: ${correct}`;
+
+    document.getElementById('next-btn').classList.remove('hidden');
+  }
+
+  // ライティング答え合わせ表示
+  function revealWritingAnswer() {
+    const q = questions[currentIndex];
+    document.getElementById('show-answer-btn').classList.add('hidden');
+    document.getElementById('writing-answer-box').classList.remove('hidden');
+    document.getElementById('writing-target-word').innerText = `${q.word} (${q.pronunciation})\n意味: ${q.meaning}`;
+    speakCurrentWord();
+  }
+
+  // ライティング自己採点
+  function answerWriting(isCorrect) {
+    userResults.push({ word: questions[currentIndex].word, isCorrect: isCorrect });
+    nextQuestion();
+  }
+
+  function nextQuestion() {
+    currentIndex++;
+    showQuestion();
+  }
+
+  // 全問終了 ➔ スプレッドシート送信 ＆ 長文表示
+  async function finishQuiz() {
+    document.getElementById('quiz-area').classList.add('hidden');
+    document.getElementById('passage-area').classList.remove('hidden');
+    document.getElementById('passage-text').innerText = quizData.unitText || "長文テキストがありません。";
+
+    // 裏で正解数をスプレッドシートに更新
+    try {
+      await fetch(GAS_API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ results: userResults })
+      });
+    } catch(e) { console.error("更新エラー", e); }
+  }
+
+  window.onload = init;
+</script>
+</body>
+</html>
