@@ -82,10 +82,9 @@
   // GASのAPI URL
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
-  let allData = [];
+  let quizData = null;
   let questions = [];
   let currentIndex = 0;
-  let currentUnitText = "";
 
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
@@ -97,24 +96,23 @@
   async function init() {
     try {
       const res = await fetch(GAS_API_URL);
-      allData = await res.json();
+      quizData = await res.json();
+
+      // リーディング単語とライティング単語を結合
+      const reading = quizData.readingWords || [];
+      const writing = quizData.writingWords || [];
       
-      // 未修得のデータのみ抽出
-      questions = allData.filter(item => item.status !== "完了");
+      // 未完了（学習対象）の単語のみを抽出
+      questions = [...reading, ...writing].filter(q => q.isTarget);
 
       if (questions.length === 0) {
-        document.getElementById('loading').innerText = "全ての単語を学習済み（完了）です！🎉";
+        document.getElementById('loading').innerText = "この単元の単語はすべて「完了」しています！🎉";
         return;
       }
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      
-      // 最初に見つかった単元長文をセット
-      const firstUnit = questions.find(q => q.unitText && q.unitText !== "");
-      if (firstUnit) {
-        currentUnitText = `【本文】\n${firstUnit.unitText}\n\n【和訳】\n${firstUnit.unitTranslation}`;
-      }
+      document.getElementById('unit-title').innerText = `単元: ${quizData.unitNo}`;
 
       showQuestion();
     } catch (e) {
@@ -130,12 +128,11 @@
     }
 
     const q = questions[currentIndex];
-    document.getElementById('unit-title').innerText = `単元: ${q.unitId}`;
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
-    document.getElementById('type-badge').innerText = q.type || "リーディング";
+    document.getElementById('type-badge').innerText = q.quizType || "リーディング";
 
     // 表示の切り替え（リーディング or ライティング）
-    if (q.type === 'ライティング') {
+    if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = " ( ?? ) ";
       // 例文内の単語を伏字にする
       const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
@@ -174,9 +171,10 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           body: JSON.stringify({
-            id: q.id,
-            correctCount: (q.correctCount || 0) + 1,
-            status: "完了"
+            results: [{
+              word: q.word,
+              isCorrect: true
+            }]
           })
         });
       } catch (e) {
@@ -191,7 +189,7 @@
   function finishQuiz() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
-    document.getElementById('passage-text').innerText = currentUnitText || "この単元に長文テキストはありません。";
+    document.getElementById('passage-text').innerText = quizData.unitText || "この単元に長文テキストはありません。";
   }
 
   window.onload = init;
