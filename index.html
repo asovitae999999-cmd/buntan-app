@@ -100,7 +100,7 @@
   let currentUnitIndex = 0;
   let questions = [];
   let currentIndex = 0;
-  let completedResults = [];
+  let completedRows = [];
   let currentUnitText = "";
   let currentUnitTranslation = "";
 
@@ -157,7 +157,7 @@
 
     document.getElementById('unit-title').innerText = `単元: ${targetUnit}`;
     currentIndex = 0;
-    completedResults = [];
+    completedRows = [];
     showQuestion();
   }
 
@@ -216,7 +216,7 @@
   function answer(isCompleted) {
     const q = questions[currentIndex];
     if (isCompleted) {
-      completedResults.push({ rowIndex: q.rowIndex, id: q.id, word: q.word, isCorrect: true });
+      completedRows.push(q.rowIndex);
     }
     currentIndex++;
     showQuestion();
@@ -249,16 +249,11 @@
     btn.disabled = true;
     btn.innerText = "データを保存中...";
 
-    // CORS回避のためにシンプルな POST 通信を行う
-    if (completedResults.length > 0) {
+    // 確実にスプレッドシートを更新（GET通信でブロックを回避）
+    if (completedRows.length > 0) {
       try {
-        const payload = JSON.stringify({ results: completedResults });
-        await fetch(GAS_API_URL, {
-          method: 'POST',
-          mode: 'no-cors', // CORSブロックを回避
-          headers: { 'Content-Type': 'text/plain' },
-          body: payload
-        });
+        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}`;
+        await fetch(updateUrl);
       } catch (e) {
         console.error("更新エラー", e);
       }
@@ -276,7 +271,8 @@
     btn.disabled = false;
     btn.innerText = "次の単元へ進む ➔";
 
-    loadUnitData(currentUnitIndex);
+    // データを再取得して更新を画面に反映
+    init();
   }
 
   window.onload = init;
