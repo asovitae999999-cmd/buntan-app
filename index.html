@@ -12,7 +12,6 @@
     .progress { font-size: 0.85rem; color: #666; text-align: right; margin-bottom: 12px; }
     .card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
     .word-title { font-size: 1.5rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
-    .pronunciation { font-size: 0.9rem; color: #666; font-weight: normal; margin-top: 4px; }
     .sentence { margin-top: 12px; font-size: 0.95rem; line-height: 1.4; color: #444; background: #fff; padding: 10px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; }
     .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; }
     .btn-option { background: #fff; border: 1px solid #ccc; text-align: left; color: #333; }
@@ -29,27 +28,21 @@
   </style>
 </head>
 <body>
-
 <div class="app-container">
   <div id="loading">データを読み込み中...</div>
-
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元 1</h1>
     <div class="progress" id="progress-text">1 / 10</div>
-
     <!-- カード画面 -->
     <div class="card">
       <div class="word-title">
         <span id="card-word">word</span>
         <button class="btn-speech" onclick="speakCurrentWord()">🔊</button>
       </div>
-      <div class="pronunciation" id="card-pron">発音</div>
       <div class="sentence" id="card-sentence">例文</div>
     </div>
-
     <!-- 解答エリア（リーディング） -->
     <div id="reading-options"></div>
-
     <!-- 解答エリア（ライティング） -->
     <div id="writing-area" class="hidden">
       <button class="btn btn-action" id="show-answer-btn" onclick="revealWritingAnswer()">答えを確認する</button>
@@ -61,12 +54,10 @@
         </div>
       </div>
     </div>
-
     <!-- フィードバック ＆ 次へボタン -->
     <div id="feedback" class="feedback"></div>
     <button id="next-btn" class="btn btn-action hidden" onclick="nextQuestion()">次の問題へ ➔</button>
   </div>
-
   <!-- 最終：長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>📖 今日の長文・和訳</h1>
@@ -74,11 +65,9 @@
     <button class="btn btn-action" onclick="location.reload()">もう一度やる / 次の単元へ</button>
   </div>
 </div>
-
 <script>
   // GASのAPI URL
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzhE3wLguu31bWIVq9XpXgDBUWQ4gXALsigejfq9Q_ZykZjiO86c4bMP18jqbYOiaeoNg/exec";
-
   let quizData = null;
   let questions = [];
   let currentIndex = 0;
@@ -97,11 +86,9 @@
     try {
       const res = await fetch(GAS_API_URL);
       quizData = await res.json();
-
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
       document.getElementById('unit-title').innerText = `【文単英検】単元 ${quizData.unitNo}`;
-
       // 全単語をまとめる
       questions = [...quizData.readingWords, ...quizData.writingWords];
       showQuestion();
@@ -116,11 +103,9 @@
       finishQuiz();
       return;
     }
-
     const q = questions[currentIndex];
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
     document.getElementById('card-word').innerText = q.quizType === 'ライティング' ? '???' : q.word;
-    document.getElementById('card-pron').innerText = q.quizType === 'ライティング' ? '' : q.pronunciation;
     
     // ライティング時は例文の英単語部分をマスク
     if (q.quizType === 'ライティング') {
@@ -129,11 +114,9 @@
     } else {
       document.getElementById('card-sentence').innerText = q.sentence;
     }
-
     // 表示切り替え
     document.getElementById('feedback').style.display = 'none';
     document.getElementById('next-btn').classList.add('hidden');
-
     if (q.quizType === 'ライティング') {
       document.getElementById('reading-options').classList.add('hidden');
       document.getElementById('writing-area').classList.remove('hidden');
@@ -150,7 +133,6 @@
   function renderReadingOptions(q) {
     const container = document.getElementById('reading-options');
     container.innerHTML = '';
-
     q.options.forEach(opt => {
       const btn = document.createElement('button');
       btn.className = 'btn btn-option';
@@ -163,25 +145,20 @@
   // リーディング回答（即時判定）
   function answerReading(selected, correct, btn) {
     const isCorrect = (selected === correct);
-    userResults.push({ word: questions[currentIndex].word, isCorrect: isCorrect });
-
-    // スピーカー音声を鳴らす
+    userResults.push({ id: questions[currentIndex].id, word: questions[currentIndex].word, isCorrect: isCorrect });
     speakCurrentWord();
-
-    // 選択肢の着色
+    
     const buttons = document.querySelectorAll('#reading-options button');
     buttons.forEach(b => {
       b.disabled = true;
       if (b.innerText === correct) b.classList.add('btn-correct');
     });
     if (!isCorrect) btn.classList.add('btn-wrong');
-
-    // フィードバック表示
+    
     const fb = document.getElementById('feedback');
     fb.style.display = 'block';
     fb.className = `feedback ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`;
     fb.innerText = isCorrect ? '⭕️ 正解！' : `❌ 不正解... 正解: ${correct}`;
-
     document.getElementById('next-btn').classList.remove('hidden');
   }
 
@@ -190,13 +167,13 @@
     const q = questions[currentIndex];
     document.getElementById('show-answer-btn').classList.add('hidden');
     document.getElementById('writing-answer-box').classList.remove('hidden');
-    document.getElementById('writing-target-word').innerText = `${q.word} (${q.pronunciation})\n意味: ${q.meaning}`;
+    document.getElementById('writing-target-word').innerText = `${q.word}\n意味: ${q.meaning}`;
     speakCurrentWord();
   }
 
   // ライティング自己採点
   function answerWriting(isCorrect) {
-    userResults.push({ word: questions[currentIndex].word, isCorrect: isCorrect });
+    userResults.push({ id: questions[currentIndex].id, word: questions[currentIndex].word, isCorrect: isCorrect });
     nextQuestion();
   }
 
@@ -210,8 +187,7 @@
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
     document.getElementById('passage-text').innerText = quizData.unitText || "長文テキストがありません。";
-
-    // 裏で正解数をスプレッドシートに更新
+    
     try {
       await fetch(GAS_API_URL, {
         method: 'POST',
