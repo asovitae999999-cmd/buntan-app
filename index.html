@@ -75,16 +75,18 @@
 
   <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
-    <h1>📖 今日の長文・和訳</h1>
+    <h1 id="finish-title">🎉 単元学習完了</h1>
     
-    <div class="reading-passage-section">
-      <div class="passage-header">【長文 英文】</div>
-      <div class="reading-passage" id="passage-text"></div>
-    </div>
+    <div id="passage-container">
+      <div class="reading-passage-section">
+        <div class="passage-header">【長文 英文】</div>
+        <div class="reading-passage" id="passage-text"></div>
+      </div>
 
-    <div class="reading-passage-section">
-      <div class="passage-header">【長文 和訳】</div>
-      <div class="reading-passage" id="passage-translation"></div>
+      <div class="reading-passage-section">
+        <div class="passage-header">【長文 和訳】</div>
+        <div class="reading-passage" id="passage-translation"></div>
+      </div>
     </div>
 
     <!-- 完了後のアクションボタン -->
@@ -96,10 +98,13 @@
 <script>
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
-  let quizData = null;
+  let allQuestions = [];
   let questions = [];
   let currentIndex = 0;
   let completedResults = [];
+  let currentTargetUnit = "";
+  let currentUnitText = "";
+  let currentUnitTranslation = "";
 
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
@@ -111,33 +116,39 @@
   async function init() {
     try {
       const res = await fetch(GAS_API_URL);
-      quizData = await res.json();
+      const quizData = await res.json();
 
-      const allQ = quizData.questions || [];
-      
-      // 最初に出会った「未完了」の単元ID（または1番目の単元ID）をターゲットにする
-      let targetUnit = quizData.unitNo || "1";
-      const firstUnfinished = allQ.find(q => q.isTarget);
-      if (firstUnfinished && firstUnfinished.unitId) {
-        targetUnit = firstUnfinished.unitId;
+      allQuestions = quizData.questions || [];
+
+      if (!allQuestions || allQuestions.length === 0) {
+        document.getElementById('loading').innerText = "スプレッドシートからデータを取得できませんでした。";
+        return;
       }
 
-      // 該当する「単元」のデータのみを抽出
-      questions = allQ.filter(q => q.unitId === targetUnit && q.isTarget);
+      // 未修得（isTarget: true）の中で最初に見つかった単元IDをターゲットにする
+      const firstUnfinished = allQuestions.find(q => q.isTarget);
+      if (firstUnfinished) {
+        currentTargetUnit = firstUnfinished.unitId;
+      } else {
+        currentTargetUnit = allQuestions[0].unitId;
+      }
 
-      // もし該当単元の未習得がなければ全件から出題
+      // 該当単元の未修得問題を抽出
+      questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
+
+      // 全て完了している場合はその単元の全問題を表示
       if (questions.length === 0) {
-        questions = allQ.filter(q => q.unitId === targetUnit);
+        questions = allQuestions.filter(q => q.unitId === currentTargetUnit);
       }
 
-      if (!questions || questions.length === 0) {
-        // 対象単元が無ければ全データから
-        questions = allQ;
-      }
+      // 該当単元の長文・和訳をセット（単元内にある行から取得）
+      const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
+      currentUnitText = unitSample ? unitSample.unitText : "";
+      currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      document.getElementById('unit-title').innerText = `単元: ${targetUnit}`;
+      document.getElementById('unit-title').innerText = `単元: ${currentTargetUnit}`;
 
       currentIndex = 0;
       showQuestion();
@@ -211,19 +222,27 @@
   function finishQuiz() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
-    document.getElementById('passage-text').innerText = quizData.unitText || "長文テキストはありません。";
-    document.getElementById('passage-translation').innerText = quizData.unitTranslation || "長文和訳はありません。";
+    
+    const passageContainer = document.getElementById('passage-container');
+    
+    // 長文が存在する場合のみ長文エリアを表示
+    if (currentUnitText.trim() !== "" || currentUnitTranslation.trim() !== "") {
+      passageContainer.classList.remove('hidden');
+      document.getElementById('passage-text').innerText = currentUnitText || "長文テキストはありません。";
+      document.getElementById('passage-translation').innerText = currentUnitTranslation || "長文和訳はありません。";
+    } else {
+      passageContainer.classList.add('hidden');
+    }
   }
 
-  // 同じ単元を最初からやり直す
   function restartUnit() {
     currentIndex = 0;
+    completedResults = [];
     document.getElementById('passage-area').classList.add('hidden');
     document.getElementById('quiz-area').classList.remove('hidden');
     showQuestion();
   }
 
-  // スプレッドシートを更新して次の画面へ
   async function goToNextUnit() {
     const btn = document.getElementById('next-unit-btn');
     btn.disabled = true;
@@ -233,6 +252,7 @@
       try {
         await fetch(GAS_API_URL, {
           method: 'POST',
+          headers: { 'Content-Type': 'text/plain' }, // CORS回避用
           body: JSON.stringify({ results: completedResults })
         });
       } catch (e) {
@@ -240,7 +260,10 @@
       }
     }
     
-    location.reload();
+    // 確実に保存処理が行われてから画面をリロード
+    setTimeout(() => {
+      location.reload();
+    }, 800);
   }
 
   window.onload = init;
