@@ -15,7 +15,6 @@
     .word-title { font-size: 1.6rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
     
     .sentence { margin-top: 12px; font-size: 1rem; line-height: 1.5; color: #333; background: #fff; padding: 12px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; word-break: break-word; }
-    
     .writing-hint { margin-top: 10px; font-size: 0.95rem; font-weight: bold; color: #174ea6; background: #e8f0fe; padding: 10px; border-radius: 8px; }
 
     .answer-box { margin-top: 16px; padding: 12px; background: #e6f4ea; border-radius: 8px; border: 1px solid #ceead6; display: none; }
@@ -25,6 +24,8 @@
     .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; border: none; }
     .btn-action { background: #1a73e8; color: #fff; }
     .btn-action:hover { background: #1557b0; }
+    .btn-secondary { background: #f1f3f4; color: #3c4043; border: 1px solid #dadce0; }
+    .btn-secondary:hover { background: #e8eaed; }
     .btn-speech { background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 0 8px; }
     
     .judge-group { display: flex; gap: 8px; margin-top: 12px; }
@@ -43,9 +44,10 @@
 <div class="app-container">
   <div id="loading">データを読み込み中...</div>
   
+  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
-    <h1 id="unit-title">単元 1</h1>
-    <div class="progress" id="progress-text">1 / 20</div>
+    <h1 id="unit-title">単元: </h1>
+    <div class="progress" id="progress-text">1 / 1</div>
     
     <div class="card">
       <span class="type-badge" id="type-badge">リーディング</span>
@@ -71,6 +73,7 @@
     </div>
   </div>
 
+  <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>📖 今日の長文・和訳</h1>
     
@@ -84,7 +87,9 @@
       <div class="reading-passage" id="passage-translation"></div>
     </div>
 
-    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 16px;" onclick="goToNextUnit()">更新して再読み込み ➔</button>
+    <!-- 完了後のアクションボタン -->
+    <button id="retry-unit-btn" class="btn btn-secondary" style="margin-top: 16px;" onclick="restartUnit()">🔄 この単元を最初からもう一度</button>
+    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次へ進む（保存して更新） ➔</button>
   </div>
 </div>
 
@@ -109,21 +114,36 @@
       quizData = await res.json();
 
       const allQ = quizData.questions || [];
-      questions = allQ.filter(q => q.isTarget);
+      
+      // 最初に出会った「未完了」の単元ID（または1番目の単元ID）をターゲットにする
+      let targetUnit = quizData.unitNo || "1";
+      const firstUnfinished = allQ.find(q => q.isTarget);
+      if (firstUnfinished && firstUnfinished.unitId) {
+        targetUnit = firstUnfinished.unitId;
+      }
 
+      // 該当する「単元」のデータのみを抽出
+      questions = allQ.filter(q => q.unitId === targetUnit && q.isTarget);
+
+      // もし該当単元の未習得がなければ全件から出題
       if (questions.length === 0) {
-        document.getElementById('loading').innerText = "未学習の単語はありません。すべて完了しています！🎉";
-        return;
+        questions = allQ.filter(q => q.unitId === targetUnit);
+      }
+
+      if (!questions || questions.length === 0) {
+        // 対象単元が無ければ全データから
+        questions = allQ;
       }
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      document.getElementById('unit-title').innerText = `単元: ${quizData.unitNo || 1}`;
+      document.getElementById('unit-title').innerText = `単元: ${targetUnit}`;
 
+      currentIndex = 0;
       showQuestion();
     } catch (e) {
       console.error(e);
-      document.getElementById('loading').innerText = "データの読み込みに失敗しました。";
+      document.getElementById('loading').innerText = "データの読み込みエラーが発生しました。";
     }
   }
 
@@ -142,7 +162,6 @@
 
     if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = " ( ?? ) ";
-      
       const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       sentenceEl.innerText = q.sentence ? q.sentence.replace(reg, '( ?? )') : "(例文なし)";
       
@@ -196,6 +215,15 @@
     document.getElementById('passage-translation').innerText = quizData.unitTranslation || "長文和訳はありません。";
   }
 
+  // 同じ単元を最初からやり直す
+  function restartUnit() {
+    currentIndex = 0;
+    document.getElementById('passage-area').classList.add('hidden');
+    document.getElementById('quiz-area').classList.remove('hidden');
+    showQuestion();
+  }
+
+  // スプレッドシートを更新して次の画面へ
   async function goToNextUnit() {
     const btn = document.getElementById('next-unit-btn');
     btn.disabled = true;
