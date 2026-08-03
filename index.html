@@ -196,21 +196,37 @@
     const speechBtn = document.getElementById('speech-btn');
 
     if (q.quizType === 'ライティング') {
-      // ★修正箇所: タイトル部分に「日本語の意味」を表示
-      document.getElementById('card-word').innerText = q.meaning;
+      // 1. タイトル部分に「日本語の意味（meaning）」を表示
+      document.getElementById('card-word').innerText = q.meaning || "日本語の意味なし";
       
-      // ライティング時は正解がバレないように音声ボタンを非表示
+      // ライティング時は音声ボタンを一旦隠す
       speechBtn.style.display = 'none';
 
-      // 例文中の単語部分を ( ?? ) に置き換える
-      const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-      sentenceEl.innerText = q.sentence ? q.sentence.replace(reg, '( ?? )') : "(例文なし)";
+      // 2. 例文内のターゲット単語を確実に ( ?? ) に置換
+      if (q.sentence && q.word) {
+        // 正規表現の特殊文字をエスケープして完全・大文字小文字無視で置換
+        const cleanWord = q.word.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const reg = new RegExp('\\b' + cleanWord + '\\b', 'gi');
+        
+        let maskedSentence = q.sentence.replace(reg, '( ?? )');
+        
+        // 万が一単語バウンダリでマッチしなかった場合のフォールバック置換
+        if (maskedSentence === q.sentence) {
+          const fallbackReg = new RegExp(cleanWord, 'gi');
+          maskedSentence = q.sentence.replace(fallbackReg, '( ?? )');
+        }
+        
+        sentenceEl.innerText = maskedSentence;
+      } else {
+        sentenceEl.innerText = "(例文なし)";
+      }
       
-      // 例文の和訳をヒント欄に表示
+      // 3. ヒント欄に「例文の和訳（translation）」を表示
       writingHintEl.innerText = `💡 例文訳: ${q.translation || "(訳なし)"}`;
       writingHintEl.classList.remove('hidden');
+
     } else {
-      // リーディング時: 英語の単語を表示
+      // リーディング時
       document.getElementById('card-word').innerText = q.word;
       speechBtn.style.display = 'inline-block';
 
@@ -241,7 +257,7 @@
     document.getElementById('show-answer-btn').classList.add('hidden');
     document.getElementById('judge-area').classList.remove('hidden');
 
-    // 答えを見たタイミングで音声再生ボタンを表示・再生
+    // 答え合わせの時に音声ボタンを表示して再生
     document.getElementById('speech-btn').style.display = 'inline-block';
     speakCurrentWord();
   }
