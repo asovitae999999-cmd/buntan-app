@@ -90,7 +90,7 @@
     </div>
 
     <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元の未修得問題だけを解き直す</button>
-    <button class="btn btn-action" style="margin-top: 8px;" onclick="init()">次の単元へ進む ➔</button>
+    <button class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
   </div>
 </div>
 
@@ -98,6 +98,8 @@
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
   let allQuestions = [];
+  let unitList = [];
+  let currentUnitIndex = 0;
   let questions = [];
   let currentIndex = 0;
   let currentTargetUnit = "";
@@ -146,7 +148,19 @@
         return;
       }
 
-      startNextAvailableUnit();
+      // シート内の全単元IDの順序リストを作成
+      unitList = [...new Set(allQuestions.map(q => q.unitId))];
+      
+      // 起動時は「未修得単語が含まれる一番最初の単元」からスタート
+      const firstUnfinished = allQuestions.find(q => q.isTarget);
+      if (firstUnfinished) {
+        currentUnitIndex = unitList.indexOf(firstUnfinished.unitId);
+        if (currentUnitIndex === -1) currentUnitIndex = 0;
+      } else {
+        currentUnitIndex = 0;
+      }
+
+      loadUnit(currentUnitIndex);
 
     } catch (e) {
       console.error(e);
@@ -154,19 +168,23 @@
     }
   }
 
-  function startNextAvailableUnit() {
-    const firstUnfinished = allQuestions.find(q => q.isTarget);
-
-    if (!firstUnfinished) {
+  function loadUnit(index) {
+    if (index >= unitList.length) {
+      // 全単元終了
       document.getElementById('loading').classList.add('hidden');
+      document.getElementById('quiz-area').classList.add('hidden');
       document.getElementById('passage-area').classList.remove('hidden');
       document.getElementById('passage-container').classList.add('hidden');
       return;
     }
 
-    currentTargetUnit = firstUnfinished.unitId;
+    currentTargetUnit = unitList[index];
 
+    // 対象単元の未修得問題を抽出（全完了していればその単元の全問題を表示）
     questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
+    if (questions.length === 0) {
+      questions = allQuestions.filter(q => q.unitId === currentTargetUnit);
+    }
 
     const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
     currentUnitText = unitSample ? unitSample.unitText : "";
@@ -175,9 +193,19 @@
     currentIndex = 0;
 
     document.getElementById('loading').classList.add('hidden');
+    document.getElementById('passage-area').classList.add('hidden');
     document.getElementById('quiz-area').classList.remove('hidden');
 
     showQuestion();
+  }
+
+  function goToNextUnit() {
+    // 強制的に次の単元インデックスへ進める
+    currentUnitIndex++;
+    if (currentUnitIndex >= unitList.length) {
+      currentUnitIndex = 0; // 最後までいったら最初に戻る
+    }
+    loadUnit(currentUnitIndex);
   }
 
   function showQuestion() {
@@ -196,11 +224,9 @@
     const speechBtn = document.getElementById('speech-btn');
 
     if (q.quizType === 'ライティング') {
-      // メイン部分に C列（意味）の内容をそのまま表示
       document.getElementById('card-word').innerText = q.meaning;
       speechBtn.style.display = 'none';
 
-      // 例文内の英単語を ( ?? ) に置き換えて表示
       if (q.sentence && q.word) {
         const rawWord = q.word.replace(/^to\s+/i, '').split('/')[0].split('[')[0].trim();
         const escWord = rawWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -214,7 +240,6 @@
       writingHintEl.classList.remove('hidden');
 
     } else {
-      // リーディング時（メイン部分に B列：英単語 を表示）
       document.getElementById('card-word').innerText = q.word;
       speechBtn.style.display = 'inline-block';
 
