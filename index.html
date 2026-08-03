@@ -42,10 +42,10 @@
 </head>
 <body>
 <div class="app-container">
-  <div id="loading">スプレッドシートから最新データを読み込み中...</div>
+  <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
   <div id="quiz-area" class="hidden">
-    <h1 id="unit-title">単元: </h1>
+    <h1 id="unit-title">英単語学習</h1>
     <div class="progress" id="progress-text">1 / 1</div>
     
     <div class="card">
@@ -73,38 +73,20 @@
   </div>
 
   <div id="passage-area" class="hidden">
-    <h1>🎉 単元学習完了</h1>
-    
-    <div id="passage-container">
-      <div class="reading-passage-section">
-        <div class="passage-header">【長文 英文】</div>
-        <div class="reading-passage" id="passage-text"></div>
-      </div>
-
-      <div class="reading-passage-section">
-        <div class="passage-header">【長文 和訳】</div>
-        <div class="reading-passage" id="passage-translation"></div>
-      </div>
-    </div>
-
-    <button id="retry-unit-btn" class="btn btn-secondary" style="margin-top: 16px;" onclick="restartUnit()">🔄 この単元をもう一度</button>
-    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
+    <h1>🎉 全問題完了！</h1>
+    <p style="text-align:center; color:#666;">すべての問題の学習が完了しました！</p>
+    <button class="btn btn-action" style="margin-top: 16px;" onclick="init()">最初から再読み込み ➔</button>
   </div>
 </div>
 
 <script>
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
-  let allQuestions = [];
-  let unitList = [];
-  let currentUnitIndex = 0; // ★常に1番目の単元（インデックス0）から開始
   let questions = [];
   let currentIndex = 0;
   let completedRows = [];
-  let currentUnitText = "";
-  let currentUnitTranslation = "";
 
-  // キャッシュを一切介さずJSONPで確実に最新データを取得する関数
+  // キャッシュを回避して最新データをJSONP取得する関数
   function fetchJSONP(url) {
     return new Promise((resolve, reject) => {
       const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
@@ -139,50 +121,32 @@
       document.getElementById('quiz-area').classList.add('hidden');
       document.getElementById('passage-area').classList.add('hidden');
 
-      // 1. 最新のデータをGoogleスプレッドシートから取得
+      // スプレッドシートからデータを取得
       const quizData = await fetchJSONP(GAS_API_URL);
-      allQuestions = quizData.questions || [];
+      const allQ = quizData.questions || [];
 
-      if (!allQuestions || allQuestions.length === 0) {
-        document.getElementById('loading').innerText = "データを取得できませんでした。";
+      // ★並び替えを行わず、ステータスが「完了」でない問題だけをスプレッドシートの上から順に抽出
+      questions = allQ.filter(q => q.isTarget);
+
+      if (questions.length === 0) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('passage-area').classList.remove('hidden');
         return;
       }
 
-      // 2. スプレッドシート上の単元IDを一番上から順番に配列化
-      unitList = [...new Set(allQuestions.map(q => q.unitId))];
-      
-      // 3. 起動時は絶対に一番最初（1番上）の単元を選択する
-      currentUnitIndex = 0;
-      loadUnitData(currentUnitIndex);
+      // ★絶対に配列の一番最初（0番目＝スプレッドシートの最上行）から起動
+      currentIndex = 0;
+      completedRows = [];
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
+
+      showQuestion();
 
     } catch (e) {
       console.error(e);
       document.getElementById('loading').innerText = "データの読み込みエラーが発生しました。";
     }
-  }
-
-  function loadUnitData(uIndex) {
-    const targetUnit = unitList[uIndex];
-    
-    // 未修得（status !== '完了'）の単語のみを抽出
-    questions = allQuestions.filter(q => q.unitId === targetUnit && q.isTarget);
-    
-    // 万が一すべて完了している場合は全単語を表示
-    if (questions.length === 0) {
-      questions = allQuestions.filter(q => q.unitId === targetUnit);
-    }
-
-    const unitSample = allQuestions.find(q => q.unitId === targetUnit && (q.unitText || q.unitTranslation));
-    currentUnitText = unitSample ? unitSample.unitText : "";
-    currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
-
-    document.getElementById('unit-title').innerText = `単元: ${targetUnit}`;
-    currentIndex = 0;
-    completedRows = [];
-    showQuestion();
   }
 
   function showQuestion() {
@@ -193,6 +157,7 @@
 
     const q = questions[currentIndex];
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
+    document.getElementById('unit-title').innerText = q.unitId ? `単元: ${q.unitId}` : "英単語学習";
     document.getElementById('type-badge').innerText = q.quizType || "リーディング";
 
     const writingHintEl = document.getElementById('writing-hint');
@@ -237,11 +202,19 @@
     speakCurrentWord();
   }
 
-  function answer(isCompleted) {
+  async function answer(isCompleted) {
     const q = questions[currentIndex];
+    
+    // 「⭕️ 覚えた！」を押したら即座にGAS通信でスプレッドシートのG列を「完了」に書き換える
     if (isCompleted) {
-      completedRows.push(q.rowIndex);
+      try {
+        const updateUrl = `${GAS_API_URL}?completedRows=${q.rowIndex}`;
+        fetchJSONP(updateUrl); // 非同期で即時送信
+      } catch (e) {
+        console.error("更新エラー", e);
+      }
     }
+
     currentIndex++;
     showQuestion();
   }
@@ -249,51 +222,6 @@
   function finishQuiz() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
-    
-    const passageContainer = document.getElementById('passage-container');
-    
-    if (currentUnitText.trim() !== "" || currentUnitTranslation.trim() !== "") {
-      passageContainer.classList.remove('hidden');
-      document.getElementById('passage-text').innerText = currentUnitText || "長文テキストはありません。";
-      document.getElementById('passage-translation').innerText = currentUnitTranslation || "長文和訳はありません。";
-    } else {
-      passageContainer.classList.add('hidden');
-    }
-  }
-
-  function restartUnit() {
-    currentIndex = 0;
-    document.getElementById('passage-area').classList.add('hidden');
-    document.getElementById('quiz-area').classList.remove('hidden');
-    showQuestion();
-  }
-
-  async function goToNextUnit() {
-    const btn = document.getElementById('next-unit-btn');
-    btn.disabled = true;
-    btn.innerText = "スプレッドシートに保存中...";
-
-    // 「覚えた！」を押した単語があれば、GASへ直接送信して確実に完了処理を待つ
-    if (completedRows.length > 0) {
-      try {
-        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}`;
-        await fetchJSONP(updateUrl); // 書き込み完了を受け取るまで確実に待機
-      } catch (e) {
-        console.error("更新エラー", e);
-      }
-    }
-
-    // 次の単元へインデックスを進める
-    currentUnitIndex++;
-    if (currentUnitIndex >= unitList.length) {
-      currentUnitIndex = 0;
-    }
-
-    btn.disabled = false;
-    btn.innerText = "次の単元へ進む ➔";
-
-    // 画面とデータを最新状態に再読み込み
-    init();
   }
 
   window.onload = init;
