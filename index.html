@@ -196,30 +196,25 @@
     const speechBtn = document.getElementById('speech-btn');
 
     if (q.quizType === 'ライティング') {
-      // 1. タイトル欄に「日本語の意味」を表示
-      document.getElementById('card-word').innerText = q.meaning || "日本語の意味なし";
-      
-      // 問題時は音声ボタンを非表示
+      // メイン部分に C列（意味）の内容をそのまま表示
+      document.getElementById('card-word').innerText = q.meaning;
       speechBtn.style.display = 'none';
 
-      // 2. 例文中の正解英単語（q.word）を ( ?? ) に置き換える
+      // 例文内の英単語を ( ?? ) に置き換えて表示
       if (q.sentence && q.word) {
-        // 熟語や「to ~」などの記号付き単語に対応するため、語幹を抽出して置換
-        const rawWord = q.word.split('/')[0].split('[')[0].trim();
+        const rawWord = q.word.replace(/^to\s+/i, '').split('/')[0].split('[')[0].trim();
         const escWord = rawWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        
         const reg = new RegExp(escWord, 'gi');
         sentenceEl.innerText = q.sentence.replace(reg, '( ?? )');
       } else {
         sentenceEl.innerText = "(例文なし)";
       }
       
-      // 3. ヒント欄に「例文の和訳」を表示
       writingHintEl.innerText = `💡 例文訳: ${q.translation || "(訳なし)"}`;
       writingHintEl.classList.remove('hidden');
 
     } else {
-      // リーディング時
+      // リーディング時（メイン部分に B列：英単語 を表示）
       document.getElementById('card-word').innerText = q.word;
       speechBtn.style.display = 'inline-block';
 
@@ -250,7 +245,6 @@
     document.getElementById('show-answer-btn').classList.add('hidden');
     document.getElementById('judge-area').classList.remove('hidden');
 
-    // 答え合わせ時に音声ボタンを表示・再生
     document.getElementById('speech-btn').style.display = 'inline-block';
     speakCurrentWord();
   }
