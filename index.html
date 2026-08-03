@@ -89,7 +89,7 @@
       </div>
     </div>
 
-    <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元の未習得問題だけを解き直す</button>
+    <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元の未修得問題だけを解き直す</button>
     <button class="btn btn-action" style="margin-top: 8px;" onclick="init()">次の単元へ進む ➔</button>
   </div>
 </div>
@@ -146,37 +146,41 @@
         return;
       }
 
-      // 未修得（isTarget: true）が含まれる一番最初の単元IDを取得
-      const firstUnfinished = allQuestions.find(q => q.isTarget);
-
-      if (!firstUnfinished) {
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('passage-area').classList.remove('hidden');
-        document.getElementById('passage-container').classList.add('hidden');
-        return;
-      }
-
-      currentTargetUnit = firstUnfinished.unitId;
-
-      // 対象単元の「未修得単語」だけを抽出
-      questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
-
-      // 該当単元の長文・和訳を取得
-      const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
-      currentUnitText = unitSample ? unitSample.unitText : "";
-      currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
-
-      currentIndex = 0;
-
-      document.getElementById('loading').classList.add('hidden');
-      document.getElementById('quiz-area').classList.remove('hidden');
-
-      showQuestion();
+      startNextAvailableUnit();
 
     } catch (e) {
       console.error(e);
       document.getElementById('loading').innerText = "データの読み込みエラーが発生しました。";
     }
+  }
+
+  function startNextAvailableUnit() {
+    // ★未修得（isTarget: true）が含まれる一番最初の単元IDを取得
+    const firstUnfinished = allQuestions.find(q => q.isTarget);
+
+    if (!firstUnfinished) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('passage-area').classList.remove('hidden');
+      document.getElementById('passage-container').classList.add('hidden');
+      return;
+    }
+
+    currentTargetUnit = firstUnfinished.unitId;
+
+    // 対象単元の「未修得単語」だけを抽出
+    questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
+
+    // 該当単元の長文・和訳を取得
+    const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
+    currentUnitText = unitSample ? unitSample.unitText : "";
+    currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
+
+    currentIndex = 0;
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('quiz-area').classList.remove('hidden');
+
+    showQuestion();
   }
 
   function showQuestion() {
@@ -236,15 +240,17 @@
     const q = questions[currentIndex];
     
     if (isCompleted) {
-      // ★重要：画面上で保持しているメモリデータ側も即座に「完了(isTarget=false)」に書き換える
+      // ★1. 画面の内部データ（全体リスト＋現在リスト）から即座に「完了」扱いにして除外する
       q.isTarget = false;
+      q.status = "完了";
+      
       const targetInAll = allQuestions.find(item => item.rowIndex === q.rowIndex);
       if (targetInAll) {
         targetInAll.isTarget = false;
         targetInAll.status = "完了";
       }
 
-      // スプレッドシートのF列（ステータス）へ「完了」の即時通信を発行
+      // ★2. スプレッドシート側（F列）へ書き込みリクエストを裏で送信する
       try {
         const updateUrl = `${GAS_API_URL}?completedRows=${q.rowIndex}`;
         fetchJSONP(updateUrl);
@@ -272,9 +278,9 @@
     }
   }
 
-  // 「この単元の未習得問題だけを解き直す」ボタンの挙動
+  // 単元のやり直し（未修得のみ再抽出）
   function restartCurrentUnit() {
-    // 画面上で「未修得（isTarget: true）」のまま残っている問題だけを再抽出
+    // ★「⭕️ 覚えた！」を押した問題が除外された最新の未修得データだけを再取得
     questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
 
     if (questions.length === 0) {
