@@ -97,7 +97,7 @@
   
   let allQuestions = [];
   let unitList = [];
-  let currentUnitIndex = 0;
+  let currentUnitIndex = 0; // ★必ず一番最初（0番目）から起動するよう固定
   let questions = [];
   let currentIndex = 0;
   let completedRows = [];
@@ -113,7 +113,10 @@
 
   async function init() {
     try {
-      const res = await fetch(GAS_API_URL);
+      // 起動記憶を完全に削除し、毎回シートの最初から始める
+      localStorage.removeItem('currentUnitIndex');
+
+      const res = await fetch(`${GAS_API_URL}?t=${Date.now()}`); // キャッシュ防止
       const quizData = await res.json();
 
       allQuestions = quizData.questions || [];
@@ -123,15 +126,11 @@
         return;
       }
 
+      // 単元IDリストを順番通りに取得
       unitList = [...new Set(allQuestions.map(q => q.unitId))];
-
-      const savedUnitIndex = localStorage.getItem('currentUnitIndex');
-      if (savedUnitIndex !== null && savedUnitIndex < unitList.length) {
-        currentUnitIndex = parseInt(savedUnitIndex, 10);
-      } else {
-        currentUnitIndex = 0;
-      }
-
+      
+      // 起動時は常に最初の単元（0番目）を読み込む
+      currentUnitIndex = 0;
       loadUnitData(currentUnitIndex);
 
       document.getElementById('loading').classList.add('hidden');
@@ -146,6 +145,7 @@
   function loadUnitData(uIndex) {
     const targetUnit = unitList[uIndex];
     
+    // 未習得（isTarget）の単語のみ抽出し、全て完了していれば単元の全問題を表示
     questions = allQuestions.filter(q => q.unitId === targetUnit && q.isTarget);
     if (questions.length === 0) {
       questions = allQuestions.filter(q => q.unitId === targetUnit);
@@ -249,29 +249,28 @@
     btn.disabled = true;
     btn.innerText = "データを保存中...";
 
-    // 確実にスプレッドシートを更新（GET通信でブロックを回避）
+    // 覚えた問題の行番号をGASへ送信してスプレッドシートを更新
     if (completedRows.length > 0) {
       try {
-        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}`;
+        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}&t=${Date.now()}`;
         await fetch(updateUrl);
       } catch (e) {
         console.error("更新エラー", e);
       }
     }
 
+    // 次の単元へ進む
     currentUnitIndex++;
     if (currentUnitIndex >= unitList.length) {
       currentUnitIndex = 0;
     }
-
-    localStorage.setItem('currentUnitIndex', currentUnitIndex);
 
     document.getElementById('passage-area').classList.add('hidden');
     document.getElementById('quiz-area').classList.remove('hidden');
     btn.disabled = false;
     btn.innerText = "次の単元へ進む ➔";
 
-    // データを再取得して更新を画面に反映
+    // 更新されたスプレッドシートのデータを読み込み直す
     init();
   }
 
