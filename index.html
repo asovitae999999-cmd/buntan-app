@@ -44,7 +44,6 @@
 <div class="app-container">
   <div id="loading">データを読み込み中...</div>
   
-  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元: </h1>
     <div class="progress" id="progress-text">1 / 1</div>
@@ -73,7 +72,6 @@
     </div>
   </div>
 
-  <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>🎉 単元学習完了</h1>
     
@@ -125,10 +123,8 @@
         return;
       }
 
-      // シート内のすべての単元IDのリストを作成（出現順）
       unitList = [...new Set(allQuestions.map(q => q.unitId))];
 
-      // 前回の単元位置が保存されていればそこから、無ければ最初の単元からスタート
       const savedUnitIndex = localStorage.getItem('currentUnitIndex');
       if (savedUnitIndex !== null && savedUnitIndex < unitList.length) {
         currentUnitIndex = parseInt(savedUnitIndex, 10);
@@ -150,13 +146,11 @@
   function loadUnitData(uIndex) {
     const targetUnit = unitList[uIndex];
     
-    // 対象単元の未修得（isTarget）問題を取得。無ければ全問題を取得
     questions = allQuestions.filter(q => q.unitId === targetUnit && q.isTarget);
     if (questions.length === 0) {
       questions = allQuestions.filter(q => q.unitId === targetUnit);
     }
 
-    // 長文・和訳をセット
     const unitSample = allQuestions.find(q => q.unitId === targetUnit && (q.unitText || q.unitTranslation));
     currentUnitText = unitSample ? unitSample.unitText : "";
     currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
@@ -255,29 +249,28 @@
     btn.disabled = true;
     btn.innerText = "データを保存中...";
 
-    // 「覚えた！」のデータをGASに送信（非同期で保存）
+    // CORS回避のためにシンプルな POST 通信を行う
     if (completedResults.length > 0) {
       try {
-        fetch(GAS_API_URL, {
+        const payload = JSON.stringify({ results: completedResults });
+        await fetch(GAS_API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ results: completedResults })
+          mode: 'no-cors', // CORSブロックを回避
+          headers: { 'Content-Type': 'text/plain' },
+          body: payload
         });
       } catch (e) {
         console.error("更新エラー", e);
       }
     }
 
-    // 次の単元インデックスに進む（未修得が残っていても進む）
     currentUnitIndex++;
     if (currentUnitIndex >= unitList.length) {
-      currentUnitIndex = 0; // 最後までいったら最初の単元に戻る
+      currentUnitIndex = 0;
     }
 
-    // 次の単元位置を保存
     localStorage.setItem('currentUnitIndex', currentUnitIndex);
 
-    // 画面切り替え
     document.getElementById('passage-area').classList.add('hidden');
     document.getElementById('quiz-area').classList.remove('hidden');
     btn.disabled = false;
