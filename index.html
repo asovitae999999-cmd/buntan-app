@@ -15,12 +15,12 @@
     .word-title { font-size: 1.6rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
     .sentence { margin-top: 12px; font-size: 0.95rem; line-height: 1.5; color: #444; background: #fff; padding: 10px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; }
     
-    /* 答えエリア */
-    .answer-box { margin-top: 16px; padding: 12px; background: #e8f0fe; border-radius: 8px; border: 1px solid #aecbfa; }
-    .answer-meaning { font-size: 1.2rem; font-weight: bold; color: #174ea6; margin-bottom: 6px; }
+    .writing-hint { margin-top: 10px; font-size: 0.95rem; font-weight: bold; color: #174ea6; background: #e8f0fe; padding: 10px; border-radius: 8px; }
+
+    .answer-box { margin-top: 16px; padding: 12px; background: #e6f4ea; border-radius: 8px; border: 1px solid #ceead6; display: none; }
+    .answer-meaning { font-size: 1.2rem; font-weight: bold; color: #137333; margin-bottom: 6px; }
     .answer-translation { font-size: 0.9rem; color: #3c4043; }
 
-    /* ボタン */
     .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; border: none; }
     .btn-action { background: #1a73e8; color: #fff; }
     .btn-action:hover { background: #1557b0; }
@@ -32,8 +32,10 @@
     .btn-forgot { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; flex: 1; }
     .btn-forgot:hover { background: #fad2cf; }
 
-    .hidden { display: none; }
-    .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; }
+    .hidden { display: none !important; }
+    .reading-passage-section { margin-bottom: 16px; }
+    .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
+    .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
   </style>
 </head>
 <body>
@@ -53,17 +55,16 @@
       </div>
       <div class="sentence" id="card-sentence">例文</div>
       
-      <!-- 回答表示領域 -->
-      <div id="answer-box" class="answer-box hidden">
-        <div class="answer-meaning" id="answer-meaning">日本語の意味</div>
-        <div class="answer-translation" id="answer-translation">例文訳</div>
+      <div id="writing-hint" class="writing-hint hidden"></div>
+
+      <div id="answer-box" class="answer-box">
+        <div class="answer-meaning" id="answer-meaning"></div>
+        <div class="answer-translation" id="answer-translation"></div>
       </div>
     </div>
 
-    <!-- アクションボタン -->
     <button id="show-answer-btn" class="btn btn-action" onclick="revealAnswer()">答えを見る</button>
     
-    <!-- 判定ボタン（初期状態は隠す） -->
     <div id="judge-area" class="judge-group hidden">
       <button class="btn btn-forgot" onclick="answer(false)">❌ まだ（次回も出す）</button>
       <button class="btn btn-remembered" onclick="answer(true)">⭕️ 覚えた！（二度と出さない）</button>
@@ -73,18 +74,28 @@
   <!-- 最終：長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>📖 今日の長文・和訳</h1>
-    <div class="reading-passage" id="passage-text"></div>
-    <button class="btn btn-action" style="margin-top: 16px;" onclick="location.reload()">もう一度学習する</button>
+    
+    <div class="reading-passage-section">
+      <div class="passage-header">【長文 英文】</div>
+      <div class="reading-passage" id="passage-text"></div>
+    </div>
+
+    <div class="reading-passage-section">
+      <div class="passage-header">【長文 和訳】</div>
+      <div class="reading-passage" id="passage-translation"></div>
+    </div>
+
+    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 16px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
   </div>
 </div>
 
 <script>
-  // GASのAPI URL
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
   let quizData = null;
   let questions = [];
   let currentIndex = 0;
+  let completedResults = [];
 
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
@@ -98,15 +109,13 @@
       const res = await fetch(GAS_API_URL);
       quizData = await res.json();
 
-      // リーディング単語とライティング単語を結合
       const reading = quizData.readingWords || [];
       const writing = quizData.writingWords || [];
       
-      // 未完了（学習対象）の単語のみを抽出
       questions = [...reading, ...writing].filter(q => q.isTarget);
 
       if (questions.length === 0) {
-        document.getElementById('loading').innerText = "この単元の単語はすべて「完了」しています！🎉";
+        document.getElementById('loading').innerText = "未学習の単語はありません。すべて完了しています！🎉";
         return;
       }
 
@@ -131,57 +140,45 @@
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
     document.getElementById('type-badge').innerText = q.quizType || "リーディング";
 
-    // 表示の切り替え（リーディング or ライティング）
+    const writingHintEl = document.getElementById('writing-hint');
+
     if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = " ( ?? ) ";
-      // 例文内の単語を伏字にする
       const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       document.getElementById('card-sentence').innerText = q.sentence.replace(reg, '( ?? )');
+      writingHintEl.innerText = `💡 訳: ${q.translation || q.meaning}`;
+      writingHintEl.classList.remove('hidden');
     } else {
       document.getElementById('card-word').innerText = q.word;
       document.getElementById('card-sentence').innerText = q.sentence;
+      writingHintEl.classList.add('hidden');
     }
 
-    // 回答領域の初期化
-    document.getElementById('answer-box').classList.add('hidden');
+    document.getElementById('answer-meaning').innerText = "";
+    document.getElementById('answer-translation').innerText = "";
+    document.getElementById('answer-box').style.display = 'none';
+    
     document.getElementById('show-answer-btn').classList.remove('hidden');
     document.getElementById('judge-area').classList.add('hidden');
   }
 
   function revealAnswer() {
     const q = questions[currentIndex];
-    
-    // 答えを表示
     document.getElementById('answer-meaning').innerText = `正解: ${q.word} 【${q.meaning}】`;
-    document.getElementById('answer-translation').innerText = `訳: ${q.translation}`;
+    document.getElementById('answer-translation').innerText = `例文訳: ${q.translation}`;
     
-    document.getElementById('answer-box').classList.remove('hidden');
+    document.getElementById('answer-box').style.display = 'block';
     document.getElementById('show-answer-btn').classList.add('hidden');
     document.getElementById('judge-area').classList.remove('hidden');
 
     speakCurrentWord();
   }
 
-  async function answer(isCompleted) {
+  function answer(isCompleted) {
     const q = questions[currentIndex];
-    
-    // 「覚えた（完了）」が選ばれた場合のみGASへステータス更新リクエストを送る
     if (isCompleted) {
-      try {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            results: [{
-              word: q.word,
-              isCorrect: true
-            }]
-          })
-        });
-      } catch (e) {
-        console.error("更新エラー", e);
-      }
+      completedResults.push({ id: q.id, word: q.word, isCorrect: true });
     }
-
     currentIndex++;
     showQuestion();
   }
@@ -190,6 +187,26 @@
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
     document.getElementById('passage-text').innerText = quizData.unitText || "この単元に長文テキストはありません。";
+    document.getElementById('passage-translation').innerText = quizData.unitTranslation || "この単元に長文和訳はありません。";
+  }
+
+  async function goToNextUnit() {
+    const btn = document.getElementById('next-unit-btn');
+    btn.disabled = true;
+    btn.innerText = "データを保存中...";
+
+    if (completedResults.length > 0) {
+      try {
+        await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ results: completedResults })
+        });
+      } catch (e) {
+        console.error("更新エラー", e);
+      }
+    }
+    
+    location.reload();
   }
 
   window.onload = init;
