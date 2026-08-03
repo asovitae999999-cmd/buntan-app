@@ -14,18 +14,14 @@
     .type-badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px; }
     .word-title { font-size: 1.6rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
     
-    /* 例文表示エリア */
     .sentence { margin-top: 12px; font-size: 1rem; line-height: 1.5; color: #333; background: #fff; padding: 12px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; word-break: break-word; }
     
-    /* ライティング時の日本語ヒント */
     .writing-hint { margin-top: 10px; font-size: 0.95rem; font-weight: bold; color: #174ea6; background: #e8f0fe; padding: 10px; border-radius: 8px; }
 
-    /* 答えエリア（初期状態は絶対に隠す） */
     .answer-box { margin-top: 16px; padding: 12px; background: #e6f4ea; border-radius: 8px; border: 1px solid #ceead6; display: none; }
     .answer-meaning { font-size: 1.2rem; font-weight: bold; color: #137333; margin-bottom: 6px; }
     .answer-translation { font-size: 0.9rem; color: #3c4043; }
 
-    /* ボタン */
     .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; border: none; }
     .btn-action { background: #1a73e8; color: #fff; }
     .btn-action:hover { background: #1557b0; }
@@ -47,7 +43,6 @@
 <div class="app-container">
   <div id="loading">データを読み込み中...</div>
   
-  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元 1</h1>
     <div class="progress" id="progress-text">1 / 20</div>
@@ -59,13 +54,9 @@
         <button class="btn-speech" onclick="speakCurrentWord()">🔊</button>
       </div>
       
-      <!-- 英語例文（出題時から必ず表示） -->
       <div class="sentence" id="card-sentence"></div>
-      
-      <!-- ライティング用ヒント -->
       <div id="writing-hint" class="writing-hint hidden"></div>
 
-      <!-- 解答表示領域（ボタンを押すまで絶対隠す） -->
       <div id="answer-box" class="answer-box">
         <div class="answer-meaning" id="answer-meaning"></div>
         <div class="answer-translation" id="answer-translation"></div>
@@ -80,7 +71,6 @@
     </div>
   </div>
 
-  <!-- 最終：長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>📖 今日の長文・和訳</h1>
     
@@ -94,7 +84,7 @@
       <div class="reading-passage" id="passage-translation"></div>
     </div>
 
-    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 16px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
+    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 16px;" onclick="goToNextUnit()">更新して再読み込み ➔</button>
   </div>
 </div>
 
@@ -118,10 +108,8 @@
       const res = await fetch(GAS_API_URL);
       quizData = await res.json();
 
-      const reading = quizData.readingWords || [];
-      const writing = quizData.writingWords || [];
-      
-      questions = [...reading, ...writing].filter(q => q.isTarget);
+      const allQ = quizData.questions || [];
+      questions = allQ.filter(q => q.isTarget);
 
       if (questions.length === 0) {
         document.getElementById('loading').innerText = "未学習の単語はありません。すべて完了しています！🎉";
@@ -130,7 +118,7 @@
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      document.getElementById('unit-title').innerText = `単元: ${quizData.unitNo}`;
+      document.getElementById('unit-title').innerText = `単元: ${quizData.unitNo || 1}`;
 
       showQuestion();
     } catch (e) {
@@ -155,21 +143,17 @@
     if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = " ( ?? ) ";
       
-      // 例文内の単語を伏字にしてセット
       const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       sentenceEl.innerText = q.sentence ? q.sentence.replace(reg, '( ?? )') : "(例文なし)";
       
-      // 日本語ヒントを表示
       writingHintEl.innerText = `💡 訳: ${q.translation || q.meaning}`;
       writingHintEl.classList.remove('hidden');
     } else {
       document.getElementById('card-word').innerText = q.word;
-      // 英語例文のみを確実にセット（日本語意味などは絶対混入させない）
       sentenceEl.innerText = q.sentence || "(例文なし)";
       writingHintEl.classList.add('hidden');
     }
 
-    // 答えエリアは初期状態で完全にクリアして非表示にする
     document.getElementById('answer-meaning').innerText = "";
     document.getElementById('answer-translation').innerText = "";
     document.getElementById('answer-box').style.display = 'none';
@@ -181,7 +165,6 @@
   function revealAnswer() {
     const q = questions[currentIndex];
     
-    // リーディングなら「日本語の意味」、ライティングなら「英単語」を正解表示する
     if (q.quizType === 'ライティング') {
       document.getElementById('answer-meaning').innerText = `正解: ${q.word}`;
     } else {
@@ -209,8 +192,8 @@
   function finishQuiz() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
-    document.getElementById('passage-text').innerText = quizData.unitText || "この単元に長文テキストはありません。";
-    document.getElementById('passage-translation').innerText = quizData.unitTranslation || "この単元に長文和訳はありません。";
+    document.getElementById('passage-text').innerText = quizData.unitText || "長文テキストはありません。";
+    document.getElementById('passage-translation').innerText = quizData.unitTranslation || "長文和訳はありません。";
   }
 
   async function goToNextUnit() {
