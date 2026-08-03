@@ -11,18 +11,27 @@
     h1 { font-size: 1.2rem; text-align: center; color: #333; margin-top: 0; }
     .progress { font-size: 0.85rem; color: #666; text-align: right; margin-bottom: 12px; }
     .card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-    .word-title { font-size: 1.5rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
-    .sentence { margin-top: 12px; font-size: 0.95rem; line-height: 1.4; color: #444; background: #fff; padding: 10px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; }
-    .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; }
-    .btn-option { background: #fff; border: 1px solid #ccc; text-align: left; color: #333; }
-    .btn-option:active { background: #e8f0fe; }
-    .btn-correct { background: #e6f4ea !important; border-color: #34a853 !important; color: #137333 !important; }
-    .btn-wrong { background: #fce8e6 !important; border-color: #ea4335 !important; color: #c5221f !important; }
-    .btn-action { background: #1a73e8; color: #fff; margin-top: 16px; }
+    .type-badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px; }
+    .word-title { font-size: 1.6rem; font-weight: bold; color: #1a73e8; display: flex; align-items: center; justify-content: space-between; }
+    .sentence { margin-top: 12px; font-size: 0.95rem; line-height: 1.5; color: #444; background: #fff; padding: 10px; border-radius: 8px; border-left: 4px solid #1a73e8; white-space: pre-wrap; }
+    
+    /* 答えエリア */
+    .answer-box { margin-top: 16px; padding: 12px; background: #e8f0fe; border-radius: 8px; border: 1px solid #aecbfa; }
+    .answer-meaning { font-size: 1.2rem; font-weight: bold; color: #174ea6; margin-bottom: 6px; }
+    .answer-translation { font-size: 0.9rem; color: #3c4043; }
+
+    /* ボタン */
+    .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; border: none; }
+    .btn-action { background: #1a73e8; color: #fff; }
+    .btn-action:hover { background: #1557b0; }
     .btn-speech { background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 0 8px; }
-    .feedback { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; }
-    .feedback-correct { background: #e6f4ea; color: #137333; }
-    .feedback-wrong { background: #fce8e6; color: #c5221f; }
+    
+    .judge-group { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-remembered { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; flex: 1; }
+    .btn-remembered:hover { background: #ceead6; }
+    .btn-forgot { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; flex: 1; }
+    .btn-forgot:hover { background: #fad2cf; }
+
     .hidden { display: none; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; }
   </style>
@@ -30,50 +39,54 @@
 <body>
 <div class="app-container">
   <div id="loading">データを読み込み中...</div>
+  
+  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元 1</h1>
-    <div class="progress" id="progress-text">1 / 10</div>
-    <!-- カード画面 -->
+    <div class="progress" id="progress-text">1 / 20</div>
+    
     <div class="card">
+      <span class="type-badge" id="type-badge">リーディング</span>
       <div class="word-title">
         <span id="card-word">word</span>
         <button class="btn-speech" onclick="speakCurrentWord()">🔊</button>
       </div>
       <div class="sentence" id="card-sentence">例文</div>
-    </div>
-    <!-- 解答エリア（リーディング） -->
-    <div id="reading-options"></div>
-    <!-- 解答エリア（ライティング） -->
-    <div id="writing-area" class="hidden">
-      <button class="btn btn-action" id="show-answer-btn" onclick="revealWritingAnswer()">答えを確認する</button>
-      <div id="writing-answer-box" class="hidden">
-        <div style="margin: 12px 0; font-weight: bold; text-align: center; font-size: 1.2rem;" id="writing-target-word"></div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-wrong" onclick="answerWriting(false)">❌ 書けなかった</button>
-          <button class="btn btn-correct" onclick="answerWriting(true)">⭕️ 書けた！</button>
-        </div>
+      
+      <!-- 回答表示領域 -->
+      <div id="answer-box" class="answer-box hidden">
+        <div class="answer-meaning" id="answer-meaning">日本語の意味</div>
+        <div class="answer-translation" id="answer-translation">例文訳</div>
       </div>
     </div>
-    <!-- フィードバック ＆ 次へボタン -->
-    <div id="feedback" class="feedback"></div>
-    <button id="next-btn" class="btn btn-action hidden" onclick="nextQuestion()">次の問題へ ➔</button>
+
+    <!-- アクションボタン -->
+    <button id="show-answer-btn" class="btn btn-action" onclick="revealAnswer()">答えを見る</button>
+    
+    <!-- 判定ボタン（初期状態は隠す） -->
+    <div id="judge-area" class="judge-group hidden">
+      <button class="btn btn-forgot" onclick="answer(false)">❌ まだ（次回も出す）</button>
+      <button class="btn btn-remembered" onclick="answer(true)">⭕️ 覚えた！（二度と出さない）</button>
+    </div>
   </div>
+
   <!-- 最終：長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>📖 今日の長文・和訳</h1>
     <div class="reading-passage" id="passage-text"></div>
-    <button class="btn btn-action" onclick="location.reload()">もう一度やる / 次の単元へ</button>
+    <button class="btn btn-action" style="margin-top: 16px;" onclick="location.reload()">もう一度学習する</button>
   </div>
 </div>
+
 <script>
   // GASのAPI URL
-  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxt_UB6p_hyF_TjJBKCJkATpObH-JXHZLPzI4lAAydlXWtjbCppf2tBCcvhFynL5A_h/exec";
-  let quizData = null;
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzhE3wLguu31bWIVq9XpXgDBUWQ4gXALsigejfq9Q_ZykZjiO86c4bMP18jqbYOiaeoNg/exec";
+  
+  let allData = [];
   let questions = [];
   let currentIndex = 0;
-  let userResults = [];
+  let currentUnitText = "";
 
-  // 音声再生（ブラウザ標準TTS）
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
     const uttr = new SpeechSynthesisUtterance(questions[currentIndex].word);
@@ -81,119 +94,104 @@
     speechSynthesis.speak(uttr);
   }
 
-  // データ初期化
   async function init() {
     try {
       const res = await fetch(GAS_API_URL);
-      quizData = await res.json();
+      allData = await res.json();
+      
+      // 未修得のデータのみ抽出
+      questions = allData.filter(item => item.status !== "完了");
+
+      if (questions.length === 0) {
+        document.getElementById('loading').innerText = "全ての単語を学習済み（完了）です！🎉";
+        return;
+      }
+
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      document.getElementById('unit-title').innerText = `【文単英検】単元 ${quizData.unitNo}`;
-      // 全単語をまとめる
-      questions = [...quizData.readingWords, ...quizData.writingWords];
+      
+      // 最初に見つかった単元長文をセット
+      const firstUnit = questions.find(q => q.unitText && q.unitText !== "");
+      if (firstUnit) {
+        currentUnitText = `【本文】\n${firstUnit.unitText}\n\n【和訳】\n${firstUnit.unitTranslation}`;
+      }
+
       showQuestion();
     } catch (e) {
+      console.error(e);
       document.getElementById('loading').innerText = "データの読み込みに失敗しました。";
     }
   }
 
-  // 出題
   function showQuestion() {
     if (currentIndex >= questions.length) {
       finishQuiz();
       return;
     }
+
     const q = questions[currentIndex];
+    document.getElementById('unit-title').innerText = `単元: ${q.unitId}`;
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
-    document.getElementById('card-word').innerText = q.quizType === 'ライティング' ? '???' : q.word;
-    
-    // ライティング時は例文の英単語部分をマスク
-    if (q.quizType === 'ライティング') {
+    document.getElementById('type-badge').innerText = q.type || "リーディング";
+
+    // 表示の切り替え（リーディング or ライティング）
+    if (q.type === 'ライティング') {
+      document.getElementById('card-word').innerText = " ( ?? ) ";
+      // 例文内の単語を伏字にする
       const reg = new RegExp(q.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-      document.getElementById('card-sentence').innerText = q.sentence.replace(reg, '( ?? )') + `\n(${q.translation})`;
+      document.getElementById('card-sentence').innerText = q.sentence.replace(reg, '( ?? )');
     } else {
+      document.getElementById('card-word').innerText = q.word;
       document.getElementById('card-sentence').innerText = q.sentence;
     }
-    // 表示切り替え
-    document.getElementById('feedback').style.display = 'none';
-    document.getElementById('next-btn').classList.add('hidden');
-    if (q.quizType === 'ライティング') {
-      document.getElementById('reading-options').classList.add('hidden');
-      document.getElementById('writing-area').classList.remove('hidden');
-      document.getElementById('show-answer-btn').classList.remove('hidden');
-      document.getElementById('writing-answer-box').classList.add('hidden');
-    } else {
-      document.getElementById('writing-area').classList.add('hidden');
-      document.getElementById('reading-options').classList.remove('hidden');
-      renderReadingOptions(q);
-    }
+
+    // 回答領域の初期化
+    document.getElementById('answer-box').classList.add('hidden');
+    document.getElementById('show-answer-btn').classList.remove('hidden');
+    document.getElementById('judge-area').classList.add('hidden');
   }
 
-  // 4択選択肢の描画
-  function renderReadingOptions(q) {
-    const container = document.getElementById('reading-options');
-    container.innerHTML = '';
-    q.options.forEach(opt => {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-option';
-      btn.innerText = opt;
-      btn.onclick = () => answerReading(opt, q.meaning, btn);
-      container.appendChild(btn);
-    });
-  }
-
-  // リーディング回答（即時判定）
-  function answerReading(selected, correct, btn) {
-    const isCorrect = (selected === correct);
-    userResults.push({ id: questions[currentIndex].id, word: questions[currentIndex].word, isCorrect: isCorrect });
-    speakCurrentWord();
-    
-    const buttons = document.querySelectorAll('#reading-options button');
-    buttons.forEach(b => {
-      b.disabled = true;
-      if (b.innerText === correct) b.classList.add('btn-correct');
-    });
-    if (!isCorrect) btn.classList.add('btn-wrong');
-    
-    const fb = document.getElementById('feedback');
-    fb.style.display = 'block';
-    fb.className = `feedback ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`;
-    fb.innerText = isCorrect ? '⭕️ 正解！' : `❌ 不正解... 正解: ${correct}`;
-    document.getElementById('next-btn').classList.remove('hidden');
-  }
-
-  // ライティング答え合わせ表示
-  function revealWritingAnswer() {
+  function revealAnswer() {
     const q = questions[currentIndex];
+    
+    // 答えを表示
+    document.getElementById('answer-meaning').innerText = `正解: ${q.word} 【${q.meaning}】`;
+    document.getElementById('answer-translation').innerText = `訳: ${q.translation}`;
+    
+    document.getElementById('answer-box').classList.remove('hidden');
     document.getElementById('show-answer-btn').classList.add('hidden');
-    document.getElementById('writing-answer-box').classList.remove('hidden');
-    document.getElementById('writing-target-word').innerText = `${q.word}\n意味: ${q.meaning}`;
+    document.getElementById('judge-area').classList.remove('hidden');
+
     speakCurrentWord();
   }
 
-  // ライティング自己採点
-  function answerWriting(isCorrect) {
-    userResults.push({ id: questions[currentIndex].id, word: questions[currentIndex].word, isCorrect: isCorrect });
-    nextQuestion();
-  }
+  async function answer(isCompleted) {
+    const q = questions[currentIndex];
+    
+    // 「覚えた（完了）」が選ばれた場合のみGASへステータス更新リクエストを送る
+    if (isCompleted) {
+      try {
+        fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            id: q.id,
+            correctCount: (q.correctCount || 0) + 1,
+            status: "完了"
+          })
+        });
+      } catch (e) {
+        console.error("更新エラー", e);
+      }
+    }
 
-  function nextQuestion() {
     currentIndex++;
     showQuestion();
   }
 
-  // 全問終了 ➔ スプレッドシート送信 ＆ 長文表示
-  async function finishQuiz() {
+  function finishQuiz() {
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
-    document.getElementById('passage-text').innerText = quizData.unitText || "長文テキストがありません。";
-    
-    try {
-      await fetch(GAS_API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ results: userResults })
-      });
-    } catch(e) { console.error("更新エラー", e); }
+    document.getElementById('passage-text').innerText = currentUnitText || "この単元に長文テキストはありません。";
   }
 
   window.onload = init;
