@@ -75,7 +75,7 @@
 
   <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
-    <h1 id="finish-title">🎉 単元学習完了</h1>
+    <h1>🎉 単元学習完了</h1>
     
     <div id="passage-container">
       <div class="reading-passage-section">
@@ -89,9 +89,8 @@
       </div>
     </div>
 
-    <!-- 完了後のアクションボタン -->
-    <button id="retry-unit-btn" class="btn btn-secondary" style="margin-top: 16px;" onclick="restartUnit()">🔄 この単元を最初からもう一度</button>
-    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次へ進む（保存して更新） ➔</button>
+    <button id="retry-unit-btn" class="btn btn-secondary" style="margin-top: 16px;" onclick="restartUnit()">🔄 この単元をもう一度</button>
+    <button id="next-unit-btn" class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
   </div>
 </div>
 
@@ -99,10 +98,11 @@
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
   let allQuestions = [];
+  let unitList = [];
+  let currentUnitIndex = 0;
   let questions = [];
   let currentIndex = 0;
   let completedResults = [];
-  let currentTargetUnit = "";
   let currentUnitText = "";
   let currentUnitTranslation = "";
 
@@ -121,41 +121,50 @@
       allQuestions = quizData.questions || [];
 
       if (!allQuestions || allQuestions.length === 0) {
-        document.getElementById('loading').innerText = "スプレッドシートからデータを取得できませんでした。";
+        document.getElementById('loading').innerText = "データを取得できませんでした。";
         return;
       }
 
-      // 未修得（isTarget: true）の中で最初に見つかった単元IDをターゲットにする
-      const firstUnfinished = allQuestions.find(q => q.isTarget);
-      if (firstUnfinished) {
-        currentTargetUnit = firstUnfinished.unitId;
+      // シート内のすべての単元IDのリストを作成（出現順）
+      unitList = [...new Set(allQuestions.map(q => q.unitId))];
+
+      // 前回の単元位置が保存されていればそこから、無ければ最初の単元からスタート
+      const savedUnitIndex = localStorage.getItem('currentUnitIndex');
+      if (savedUnitIndex !== null && savedUnitIndex < unitList.length) {
+        currentUnitIndex = parseInt(savedUnitIndex, 10);
       } else {
-        currentTargetUnit = allQuestions[0].unitId;
+        currentUnitIndex = 0;
       }
 
-      // 該当単元の未修得問題を抽出
-      questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
-
-      // 全て完了している場合はその単元の全問題を表示
-      if (questions.length === 0) {
-        questions = allQuestions.filter(q => q.unitId === currentTargetUnit);
-      }
-
-      // 該当単元の長文・和訳をセット（単元内にある行から取得）
-      const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
-      currentUnitText = unitSample ? unitSample.unitText : "";
-      currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
+      loadUnitData(currentUnitIndex);
 
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.remove('hidden');
-      document.getElementById('unit-title').innerText = `単元: ${currentTargetUnit}`;
 
-      currentIndex = 0;
-      showQuestion();
     } catch (e) {
       console.error(e);
       document.getElementById('loading').innerText = "データの読み込みエラーが発生しました。";
     }
+  }
+
+  function loadUnitData(uIndex) {
+    const targetUnit = unitList[uIndex];
+    
+    // 対象単元の未修得（isTarget）問題を取得。無ければ全問題を取得
+    questions = allQuestions.filter(q => q.unitId === targetUnit && q.isTarget);
+    if (questions.length === 0) {
+      questions = allQuestions.filter(q => q.unitId === targetUnit);
+    }
+
+    // 長文・和訳をセット
+    const unitSample = allQuestions.find(q => q.unitId === targetUnit && (q.unitText || q.unitTranslation));
+    currentUnitText = unitSample ? unitSample.unitText : "";
+    currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
+
+    document.getElementById('unit-title').innerText = `単元: ${targetUnit}`;
+    currentIndex = 0;
+    completedResults = [];
+    showQuestion();
   }
 
   function showQuestion() {
@@ -213,7 +222,7 @@
   function answer(isCompleted) {
     const q = questions[currentIndex];
     if (isCompleted) {
-      completedResults.push({ id: q.id, word: q.word, isCorrect: true });
+      completedResults.push({ rowIndex: q.rowIndex, id: q.id, word: q.word, isCorrect: true });
     }
     currentIndex++;
     showQuestion();
@@ -225,7 +234,6 @@
     
     const passageContainer = document.getElementById('passage-container');
     
-    // 長文が存在する場合のみ長文エリアを表示
     if (currentUnitText.trim() !== "" || currentUnitTranslation.trim() !== "") {
       passageContainer.classList.remove('hidden');
       document.getElementById('passage-text').innerText = currentUnitText || "長文テキストはありません。";
@@ -237,7 +245,6 @@
 
   function restartUnit() {
     currentIndex = 0;
-    completedResults = [];
     document.getElementById('passage-area').classList.add('hidden');
     document.getElementById('quiz-area').classList.remove('hidden');
     showQuestion();
@@ -248,22 +255,35 @@
     btn.disabled = true;
     btn.innerText = "データを保存中...";
 
+    // 「覚えた！」のデータをGASに送信（非同期で保存）
     if (completedResults.length > 0) {
       try {
-        await fetch(GAS_API_URL, {
+        fetch(GAS_API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' }, // CORS回避用
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ results: completedResults })
         });
       } catch (e) {
         console.error("更新エラー", e);
       }
     }
-    
-    // 確実に保存処理が行われてから画面をリロード
-    setTimeout(() => {
-      location.reload();
-    }, 800);
+
+    // 次の単元インデックスに進む（未修得が残っていても進む）
+    currentUnitIndex++;
+    if (currentUnitIndex >= unitList.length) {
+      currentUnitIndex = 0; // 最後までいったら最初の単元に戻る
+    }
+
+    // 次の単元位置を保存
+    localStorage.setItem('currentUnitIndex', currentUnitIndex);
+
+    // 画面切り替え
+    document.getElementById('passage-area').classList.add('hidden');
+    document.getElementById('quiz-area').classList.remove('hidden');
+    btn.disabled = false;
+    btn.innerText = "次の単元へ進む ➔";
+
+    loadUnitData(currentUnitIndex);
   }
 
   window.onload = init;
