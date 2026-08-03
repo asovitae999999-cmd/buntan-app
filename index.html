@@ -42,7 +42,7 @@
 </head>
 <body>
 <div class="app-container">
-  <div id="loading">データを読み込み中...</div>
+  <div id="loading">スプレッドシートから最新データを読み込み中...</div>
   
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元: </h1>
@@ -97,12 +97,34 @@
   
   let allQuestions = [];
   let unitList = [];
-  let currentUnitIndex = 0; // ★必ず一番最初（0番目）から起動するよう固定
+  let currentUnitIndex = 0; // ★常に1番目の単元（インデックス0）から開始
   let questions = [];
   let currentIndex = 0;
   let completedRows = [];
   let currentUnitText = "";
   let currentUnitTranslation = "";
+
+  // キャッシュを一切介さずJSONPで確実に最新データを取得する関数
+  function fetchJSONP(url) {
+    return new Promise((resolve, reject) => {
+      const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
+      window[callbackName] = function(data) {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        resolve(data);
+      };
+
+      const script = document.createElement('script');
+      const delimiter = url.indexOf('?') >= 0 ? '&' : '?';
+      script.src = `${url}${delimiter}callback=${callbackName}&_nocache=${Date.now()}`;
+      script.onerror = function() {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        reject(new Error('通信エラーが発生しました'));
+      };
+      document.body.appendChild(script);
+    });
+  }
 
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
@@ -113,12 +135,12 @@
 
   async function init() {
     try {
-      // 起動記憶を完全に削除し、毎回シートの最初から始める
-      localStorage.removeItem('currentUnitIndex');
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('quiz-area').classList.add('hidden');
+      document.getElementById('passage-area').classList.add('hidden');
 
-      const res = await fetch(`${GAS_API_URL}?t=${Date.now()}`); // キャッシュ防止
-      const quizData = await res.json();
-
+      // 1. 最新のデータをGoogleスプレッドシートから取得
+      const quizData = await fetchJSONP(GAS_API_URL);
       allQuestions = quizData.questions || [];
 
       if (!allQuestions || allQuestions.length === 0) {
@@ -126,10 +148,10 @@
         return;
       }
 
-      // 単元IDリストを順番通りに取得
+      // 2. スプレッドシート上の単元IDを一番上から順番に配列化
       unitList = [...new Set(allQuestions.map(q => q.unitId))];
       
-      // 起動時は常に最初の単元（0番目）を読み込む
+      // 3. 起動時は絶対に一番最初（1番上）の単元を選択する
       currentUnitIndex = 0;
       loadUnitData(currentUnitIndex);
 
@@ -145,8 +167,10 @@
   function loadUnitData(uIndex) {
     const targetUnit = unitList[uIndex];
     
-    // 未習得（isTarget）の単語のみ抽出し、全て完了していれば単元の全問題を表示
+    // 未修得（status !== '完了'）の単語のみを抽出
     questions = allQuestions.filter(q => q.unitId === targetUnit && q.isTarget);
+    
+    // 万が一すべて完了している場合は全単語を表示
     if (questions.length === 0) {
       questions = allQuestions.filter(q => q.unitId === targetUnit);
     }
@@ -247,30 +271,28 @@
   async function goToNextUnit() {
     const btn = document.getElementById('next-unit-btn');
     btn.disabled = true;
-    btn.innerText = "データを保存中...";
+    btn.innerText = "スプレッドシートに保存中...";
 
-    // 覚えた問題の行番号をGASへ送信してスプレッドシートを更新
+    // 「覚えた！」を押した単語があれば、GASへ直接送信して確実に完了処理を待つ
     if (completedRows.length > 0) {
       try {
-        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}&t=${Date.now()}`;
-        await fetch(updateUrl);
+        const updateUrl = `${GAS_API_URL}?completedRows=${completedRows.join(',')}`;
+        await fetchJSONP(updateUrl); // 書き込み完了を受け取るまで確実に待機
       } catch (e) {
         console.error("更新エラー", e);
       }
     }
 
-    // 次の単元へ進む
+    // 次の単元へインデックスを進める
     currentUnitIndex++;
     if (currentUnitIndex >= unitList.length) {
       currentUnitIndex = 0;
     }
 
-    document.getElementById('passage-area').classList.add('hidden');
-    document.getElementById('quiz-area').classList.remove('hidden');
     btn.disabled = false;
     btn.innerText = "次の単元へ進む ➔";
 
-    // 更新されたスプレッドシートのデータを読み込み直す
+    // 画面とデータを最新状態に再読み込み
     init();
   }
 
