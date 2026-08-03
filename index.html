@@ -24,6 +24,8 @@
     .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; border: none; }
     .btn-action { background: #1a73e8; color: #fff; }
     .btn-action:hover { background: #1557b0; }
+    .btn-secondary { background: #f1f3f4; color: #3c4043; border: 1px solid #dadce0; }
+    .btn-secondary:hover { background: #e8eaed; }
     .btn-speech { background: none; border: none; font-size: 1.4rem; cursor: pointer; padding: 0 8px; }
     
     .judge-group { display: flex; gap: 8px; margin-top: 12px; }
@@ -33,14 +35,18 @@
     .btn-forgot:hover { background: #fad2cf; }
 
     .hidden { display: none !important; }
+    .reading-passage-section { margin-bottom: 16px; }
+    .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
+    .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
   </style>
 </head>
 <body>
 <div class="app-container">
   <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
+  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
-    <h1 id="unit-title">英単語学習</h1>
+    <h1 id="unit-title">単元: </h1>
     <div class="progress" id="progress-text">1 / 1</div>
     
     <div class="card">
@@ -67,18 +73,36 @@
     </div>
   </div>
 
+  <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
-    <h1>🎉 すべての学習が完了しました！</h1>
-    <p style="text-align:center; color:#666;">未修得の単語はありません。</p>
-    <button class="btn btn-action" style="margin-top: 16px;" onclick="init()">再読み込み ➔</button>
+    <h1>🎉 単元学習完了！</h1>
+    
+    <div id="passage-container">
+      <div class="reading-passage-section">
+        <div class="passage-header">【長文 英文】</div>
+        <div class="reading-passage" id="passage-text"></div>
+      </div>
+
+      <div class="reading-passage-section">
+        <div class="passage-header">【長文 和訳】</div>
+        <div class="reading-passage" id="passage-translation"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元をもう一度</button>
+    <button class="btn btn-action" style="margin-top: 8px;" onclick="init()">次の単元へ進む ➔</button>
   </div>
 </div>
 
 <script>
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxRP2UK6Q3H7s7U-nffnWCxF510gkN6kZ24z30ag9WnVwqvgnLBEPcGtjsLOwS87k5Hqg/exec";
   
+  let allQuestions = [];
   let questions = [];
   let currentIndex = 0;
+  let currentTargetUnit = "";
+  let currentUnitText = "";
+  let currentUnitTranslation = "";
 
   function fetchJSONP(url) {
     return new Promise((resolve, reject) => {
@@ -115,18 +139,34 @@
       document.getElementById('passage-area').classList.add('hidden');
 
       const quizData = await fetchJSONP(GAS_API_URL);
-      const allQ = quizData.questions || [];
+      allQuestions = quizData.questions || [];
 
-      // ★スプレッドシートの上から順に見て、F列が「完了」でない問題だけを抽出
-      questions = allQ.filter(q => q.isTarget);
-
-      if (questions.length === 0) {
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('passage-area').classList.remove('hidden');
+      if (allQuestions.length === 0) {
+        document.getElementById('loading').innerText = "データがありません。";
         return;
       }
 
-      // ★未修得リストの一番最初（0番目＝シートの最上部にある未修得単語）から必ず出題開始
+      // ★スプレッドシート上から見て「未修得（isTarget: true）」が含まれる一番最初の単元IDを探す
+      const firstUnfinished = allQuestions.find(q => q.isTarget);
+
+      if (!firstUnfinished) {
+        // すべて完了している場合
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('passage-area').classList.remove('hidden');
+        document.getElementById('passage-container').classList.add('hidden');
+        return;
+      }
+
+      currentTargetUnit = firstUnfinished.unitId;
+
+      // 対象単元の「未修得単語」だけを順番通り抽出
+      questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
+
+      // 該当単元の長文・和訳を取得
+      const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
+      currentUnitText = unitSample ? unitSample.unitText : "";
+      currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
+
       currentIndex = 0;
 
       document.getElementById('loading').classList.add('hidden');
@@ -142,14 +182,13 @@
 
   function showQuestion() {
     if (currentIndex >= questions.length) {
-      document.getElementById('quiz-area').classList.add('hidden');
-      document.getElementById('passage-area').classList.remove('hidden');
+      finishQuiz();
       return;
     }
 
     const q = questions[currentIndex];
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
-    document.getElementById('unit-title').innerText = q.unitId ? `単元: ${q.unitId}` : "英単語学習";
+    document.getElementById('unit-title').innerText = `単元: ${currentTargetUnit}`;
     document.getElementById('type-badge').innerText = q.quizType || "リーディング";
 
     const writingHintEl = document.getElementById('writing-hint');
@@ -198,7 +237,7 @@
     const q = questions[currentIndex];
     
     if (isCompleted) {
-      // ⭕️ 覚えた！を押した瞬間にF列（該当行）を「完了」に書き換える通信を行う
+      // 「⭕️ 覚えた！」を押すと速やかにF列（ステータス）を「完了」に更新
       try {
         const updateUrl = `${GAS_API_URL}?completedRows=${q.rowIndex}`;
         fetchJSONP(updateUrl);
@@ -208,6 +247,31 @@
     }
 
     currentIndex++;
+    showQuestion();
+  }
+
+  function finishQuiz() {
+    document.getElementById('quiz-area').classList.add('hidden');
+    document.getElementById('passage-area').classList.remove('hidden');
+    
+    const passageContainer = document.getElementById('passage-container');
+    
+    // 単元に長文が登録されている場合のみ表示
+    if (currentUnitText.trim() !== "" || currentUnitTranslation.trim() !== "") {
+      passageContainer.classList.remove('hidden');
+      document.getElementById('passage-text').innerText = currentUnitText || "長文テキストはありません。";
+      document.getElementById('passage-translation').innerText = currentUnitTranslation || "長文和訳はありません。";
+    } else {
+      passageContainer.classList.add('hidden');
+    }
+  }
+
+  function restartCurrentUnit() {
+    // 該当単元の全単語を再取得して最初からやり直す
+    questions = allQuestions.filter(q => q.unitId === currentTargetUnit);
+    currentIndex = 0;
+    document.getElementById('passage-area').classList.add('hidden');
+    document.getElementById('quiz-area').classList.remove('hidden');
     showQuestion();
   }
 
