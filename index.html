@@ -38,6 +38,14 @@
     .reading-passage-section { margin-bottom: 16px; }
     .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
+
+    /* ★目標ペースカード用スタイル */
+    .pace-card { background: #f8f9fa; border: 2px solid #e8f0fe; border-radius: 12px; padding: 16px; margin-top: 20px; text-align: left; }
+    .pace-card h3 { font-size: 1rem; color: #1a73e8; margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .pace-item { font-size: 0.9rem; color: #444; margin: 6px 0; display: flex; justify-content: space-between; }
+    .pace-highlight { font-weight: bold; color: #d93025; }
+    .pace-target-box { background: #e6f4ea; border: 1px solid #ceead6; border-radius: 8px; padding: 10px; margin-top: 10px; text-align: center; }
+    .pace-target-val { font-size: 1.3rem; font-weight: bold; color: #137333; }
   </style>
 </head>
 <body>
@@ -89,6 +97,30 @@
       </div>
     </div>
 
+    <!-- ★目標ペース計算結果の表示カード -->
+    <div id="pace-card" class="pace-card">
+      <h3>📊 全体進捗・目標ペース</h3>
+      <div class="pace-item">
+        <span>全単語数:</span>
+        <span id="pace-total">- 語</span>
+      </div>
+      <div class="pace-item">
+        <span>残りの未習得単語数:</span>
+        <span id="pace-remaining" class="pace-highlight">- 語</span>
+      </div>
+      <div class="pace-item">
+        <span>目標期限日:</span>
+        <span id="pace-date">-</span>
+      </div>
+      <div class="pace-item">
+        <span>学習可能日数 (週5日換算):</span>
+        <span id="pace-days">- 日</span>
+      </div>
+      <div class="pace-target-box">
+        目標: 1日あたり <span id="pace-daily" class="pace-target-val">-</span> 語習得
+      </div>
+    </div>
+
     <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元の未修得問題だけを解き直す</button>
     <button class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
   </div>
@@ -105,6 +137,7 @@
   let currentTargetUnit = "";
   let currentUnitText = "";
   let currentUnitTranslation = "";
+  let paceInfo = null; // GASから受け取る目標ペースデータ
 
   function fetchJSONP(url) {
     return new Promise((resolve, reject) => {
@@ -142,6 +175,7 @@
 
       const quizData = await fetchJSONP(GAS_API_URL);
       allQuestions = quizData.questions || [];
+      paceInfo = quizData.paceInfo || null; // パースデータ保持
 
       if (allQuestions.length === 0) {
         document.getElementById('loading').innerText = "データがありません。";
@@ -175,6 +209,7 @@
       document.getElementById('quiz-area').classList.add('hidden');
       document.getElementById('passage-area').classList.remove('hidden');
       document.getElementById('passage-container').classList.add('hidden');
+      updatePaceDisplay();
       return;
     }
 
@@ -293,6 +328,14 @@
         targetInAll.status = "完了";
       }
 
+      // クライアント側の残り単語数と目標ペースを即座に再計算・減算
+      if (paceInfo && paceInfo.remainingWords > 0) {
+        paceInfo.remainingWords--;
+        if (paceInfo.remainingDays > 0) {
+          paceInfo.dailyTarget = Math.ceil(paceInfo.remainingWords / paceInfo.remainingDays);
+        }
+      }
+
       try {
         const updateUrl = `${GAS_API_URL}?completedRows=${q.rowIndex}`;
         fetchJSONP(updateUrl);
@@ -318,6 +361,20 @@
     } else {
       passageContainer.classList.add('hidden');
     }
+
+    // 目標ペース画面を更新
+    updatePaceDisplay();
+  }
+
+  // 目標ペースカードの表示更新関数
+  function updatePaceDisplay() {
+    if (!paceInfo) return;
+    
+    document.getElementById('pace-total').innerText = `${paceInfo.totalWords.toLocaleString()} 語`;
+    document.getElementById('pace-remaining').innerText = `${paceInfo.remainingWords.toLocaleString()} 語`;
+    document.getElementById('pace-date').innerText = paceInfo.targetDate || "-";
+    document.getElementById('pace-days').innerText = `${paceInfo.remainingDays} 日`;
+    document.getElementById('pace-daily').innerText = `${paceInfo.dailyTarget}`;
   }
 
   function restartCurrentUnit() {
