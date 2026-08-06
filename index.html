@@ -39,7 +39,7 @@
     .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
 
-    /* ★全画面共通・常時表示ノルマヘッダー */
+    /* 全画面共通・常時表示ノルマヘッダー */
     .top-pace-bar { background: #f8f9fa; border: 1.5px solid #1a73e8; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; text-align: left; }
     .top-pace-title { font-size: 0.8rem; font-weight: bold; color: #1a73e8; margin-bottom: 6px; display: flex; justify-content: space-between; }
     .top-pace-details { font-size: 0.8rem; color: #555; display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding-bottom: 6px; margin-bottom: 6px; }
@@ -52,7 +52,7 @@
 <div class="app-container">
   <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
-  <!-- ★全画面共通で表示されるノルマヘッダー -->
+  <!-- 全画面共通で表示されるノルマヘッダー -->
   <div id="top-pace-bar" class="top-pace-bar hidden">
     <div class="top-pace-title">
       <span>📊 全体目標ノルマ（週5日）</span>
@@ -152,11 +152,36 @@
     });
   }
 
+  // ★音声読み上げ関数（英語＋日本語を連続再生）
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
-    const uttr = new SpeechSynthesisUtterance(questions[currentIndex].word);
-    uttr.lang = 'en-US';
-    speechSynthesis.speak(uttr);
+    const q = questions[currentIndex];
+    
+    // 現在実行中の読み上げを一旦キャンセル
+    speechSynthesis.cancel();
+
+    if (q.quizType === 'ライティング') {
+      // ライティング時：日本語（意味） ➔ 英語（単語）
+      const uttrJa = new SpeechSynthesisUtterance(q.meaning);
+      uttrJa.lang = 'ja-JP';
+
+      const uttrEn = new SpeechSynthesisUtterance(q.word);
+      uttrEn.lang = 'en-US';
+
+      uttrJa.onend = () => speechSynthesis.speak(uttrEn);
+      speechSynthesis.speak(uttrJa);
+
+    } else {
+      // リーディング時：英語（単語） ➔ 日本語（意味）
+      const uttrEn = new SpeechSynthesisUtterance(q.word);
+      uttrEn.lang = 'en-US';
+
+      const uttrJa = new SpeechSynthesisUtterance(q.meaning);
+      uttrJa.lang = 'ja-JP';
+
+      uttrEn.onend = () => speechSynthesis.speak(uttrJa);
+      speechSynthesis.speak(uttrEn);
+    }
   }
 
   async function init() {
@@ -185,7 +210,6 @@
         currentUnitIndex = 0;
       }
 
-      // ノルマヘッダー初期描画
       updatePaceDisplay();
       document.getElementById('top-pace-bar').classList.remove('hidden');
 
@@ -252,7 +276,7 @@
 
     if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = q.meaning;
-      speechBtn.style.display = 'none';
+      speechBtn.style.display = 'inline-block';
 
       if (q.sentence && q.word) {
         const rawWord = q.word.replace(/^to\s+/i, '').split('/')[0].split('[')[0].trim();
@@ -280,6 +304,9 @@
     
     document.getElementById('show-answer-btn').classList.remove('hidden');
     document.getElementById('judge-area').classList.add('hidden');
+
+    // ★次の単語に移った際、自動で音声（英語＋日本語）を再生
+    speakCurrentWord();
   }
 
   function revealAnswer() {
@@ -314,7 +341,6 @@
         targetInAll.status = "完了";
       }
 
-      // 「覚えた」瞬間にリアルタイムで残数を減らし上部バーを再描画
       if (paceInfo && paceInfo.remainingWords > 0) {
         paceInfo.remainingWords--;
         if (paceInfo.remainingDays > 0) {
@@ -336,6 +362,7 @@
   }
 
   function finishQuiz() {
+    speechSynthesis.cancel(); // 終了時は音声停止
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
     
@@ -352,7 +379,6 @@
     updatePaceDisplay();
   }
 
-  // ノルマ表示更新関数（全画面共通ヘッダーを書き換え）
   function updatePaceDisplay() {
     if (!paceInfo) return;
     
