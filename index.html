@@ -148,35 +148,26 @@
     });
   }
 
-  // ★改善版：日本語と英語を確実にキューに入れて発声させる処理
+  // ★ブラウザ制限を回避する確実な音声読み上げ関数
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
     const q = questions[currentIndex];
     
-    window.speechSynthesis.cancel(); // 前の読み上げを停止
+    window.speechSynthesis.cancel(); // 停止
 
+    // 音声エンジン（ja-JP）を使って英語と日本語を一つのストリームで読ませる
+    let textToSpeak = "";
     if (q.quizType === 'ライティング') {
-      // ライティング時：日本語（意味）➔ 英語（英単語）
-      const uttrJa = new SpeechSynthesisUtterance(q.meaning);
-      uttrJa.lang = 'ja-JP';
-
-      const uttrEn = new SpeechSynthesisUtterance(q.word);
-      uttrEn.lang = 'en-US';
-
-      window.speechSynthesis.speak(uttrJa);
-      window.speechSynthesis.speak(uttrEn);
-
+      textToSpeak = `${q.meaning}。 ${q.word}`;
     } else {
-      // リーディング時：英語（英単語）➔ 日本語（意味）
-      const uttrEn = new SpeechSynthesisUtterance(q.word);
-      uttrEn.lang = 'en-US';
-
-      const uttrJa = new SpeechSynthesisUtterance(q.meaning);
-      uttrJa.lang = 'ja-JP';
-
-      window.speechSynthesis.speak(uttrEn);
-      window.speechSynthesis.speak(uttrJa);
+      textToSpeak = `${q.word}。 ${q.meaning}`;
     }
+
+    const uttr = new SpeechSynthesisUtterance(textToSpeak);
+    uttr.lang = 'ja-JP'; // 日本語エンジンベースで英語（アルファベット）も混ざったテキストとして読ませる
+    uttr.rate = 0.9;   // 少しゆっくりめ
+
+    window.speechSynthesis.speak(uttr);
   }
 
   async function init() {
@@ -300,7 +291,7 @@
     document.getElementById('show-answer-btn').classList.remove('hidden');
     document.getElementById('judge-area').classList.add('hidden');
 
-    // 問題切り替え時に自動発声
+    // 問題表示時に音声を再生
     speakCurrentWord();
   }
 
