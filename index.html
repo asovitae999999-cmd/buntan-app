@@ -39,7 +39,6 @@
     .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
 
-    /* 全画面共通・常時表示ノルマヘッダー */
     .top-pace-bar { background: #f8f9fa; border: 1.5px solid #1a73e8; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; text-align: left; }
     .top-pace-title { font-size: 0.8rem; font-weight: bold; color: #1a73e8; margin-bottom: 6px; display: flex; justify-content: space-between; }
     .top-pace-details { font-size: 0.8rem; color: #555; display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding-bottom: 6px; margin-bottom: 6px; }
@@ -52,7 +51,6 @@
 <div class="app-container">
   <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
-  <!-- 全画面共通で表示されるノルマヘッダー -->
   <div id="top-pace-bar" class="top-pace-bar hidden">
     <div class="top-pace-title">
       <span>📊 全体目標ノルマ（週5日）</span>
@@ -68,7 +66,6 @@
     </div>
   </div>
 
-  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元: </h1>
     <div class="progress" id="progress-text">1 / 1</div>
@@ -97,7 +94,6 @@
     </div>
   </div>
 
-  <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>🎉 単元学習完了！</h1>
     
@@ -152,35 +148,34 @@
     });
   }
 
-  // ★音声読み上げ関数（英語＋日本語を連続再生）
+  // ★改善版：日本語と英語を確実にキューに入れて発声させる処理
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
     const q = questions[currentIndex];
     
-    // 現在実行中の読み上げを一旦キャンセル
-    speechSynthesis.cancel();
+    window.speechSynthesis.cancel(); // 前の読み上げを停止
 
     if (q.quizType === 'ライティング') {
-      // ライティング時：日本語（意味） ➔ 英語（単語）
+      // ライティング時：日本語（意味）➔ 英語（英単語）
       const uttrJa = new SpeechSynthesisUtterance(q.meaning);
       uttrJa.lang = 'ja-JP';
 
       const uttrEn = new SpeechSynthesisUtterance(q.word);
       uttrEn.lang = 'en-US';
 
-      uttrJa.onend = () => speechSynthesis.speak(uttrEn);
-      speechSynthesis.speak(uttrJa);
+      window.speechSynthesis.speak(uttrJa);
+      window.speechSynthesis.speak(uttrEn);
 
     } else {
-      // リーディング時：英語（単語） ➔ 日本語（意味）
+      // リーディング時：英語（英単語）➔ 日本語（意味）
       const uttrEn = new SpeechSynthesisUtterance(q.word);
       uttrEn.lang = 'en-US';
 
       const uttrJa = new SpeechSynthesisUtterance(q.meaning);
       uttrJa.lang = 'ja-JP';
 
-      uttrEn.onend = () => speechSynthesis.speak(uttrJa);
-      speechSynthesis.speak(uttrEn);
+      window.speechSynthesis.speak(uttrEn);
+      window.speechSynthesis.speak(uttrJa);
     }
   }
 
@@ -305,7 +300,7 @@
     document.getElementById('show-answer-btn').classList.remove('hidden');
     document.getElementById('judge-area').classList.add('hidden');
 
-    // ★次の単語に移った際、自動で音声（英語＋日本語）を再生
+    // 問題切り替え時に自動発声
     speakCurrentWord();
   }
 
@@ -362,7 +357,7 @@
   }
 
   function finishQuiz() {
-    speechSynthesis.cancel(); // 終了時は音声停止
+    window.speechSynthesis.cancel();
     document.getElementById('quiz-area').classList.add('hidden');
     document.getElementById('passage-area').classList.remove('hidden');
     
