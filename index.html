@@ -39,19 +39,35 @@
     .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
 
-    /* ★目標ペースカード用スタイル */
-    .pace-card { background: #f8f9fa; border: 2px solid #e8f0fe; border-radius: 12px; padding: 16px; margin-top: 20px; text-align: left; }
-    .pace-card h3 { font-size: 1rem; color: #1a73e8; margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-    .pace-item { font-size: 0.9rem; color: #444; margin: 6px 0; display: flex; justify-content: space-between; }
-    .pace-highlight { font-weight: bold; color: #d93025; }
-    .pace-target-box { background: #e6f4ea; border: 1px solid #ceead6; border-radius: 8px; padding: 10px; margin-top: 10px; text-align: center; }
-    .pace-target-val { font-size: 1.3rem; font-weight: bold; color: #137333; }
+    /* ★全画面共通・常時表示ノルマヘッダー */
+    .top-pace-bar { background: #f8f9fa; border: 1.5px solid #1a73e8; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; text-align: left; }
+    .top-pace-title { font-size: 0.8rem; font-weight: bold; color: #1a73e8; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .top-pace-details { font-size: 0.8rem; color: #555; display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding-bottom: 6px; margin-bottom: 6px; }
+    .top-pace-target { font-size: 0.95rem; font-weight: bold; color: #137333; text-align: center; }
+    .highlight-red { color: #d93025; font-weight: bold; }
+    .highlight-val { font-size: 1.1rem; color: #137333; }
   </style>
 </head>
 <body>
 <div class="app-container">
   <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
+  <!-- ★全画面共通で表示されるノルマヘッダー -->
+  <div id="top-pace-bar" class="top-pace-bar hidden">
+    <div class="top-pace-title">
+      <span>📊 全体目標ノルマ（週5日）</span>
+      <span>期限: <span id="pace-date">-</span></span>
+    </div>
+    <div class="top-pace-details">
+      <span>全 <span id="pace-total">-</span> 語</span>
+      <span>残り: <span id="pace-remaining" class="highlight-red">-</span> 語</span>
+      <span>可動: <span id="pace-days">-</span> 日</span>
+    </div>
+    <div class="top-pace-target">
+      🔥 あと1日あたり <span id="pace-daily" class="highlight-val">-</span> 語！
+    </div>
+  </div>
+
   <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元: </h1>
@@ -97,30 +113,6 @@
       </div>
     </div>
 
-    <!-- ★目標ペース計算結果の表示カード -->
-    <div id="pace-card" class="pace-card">
-      <h3>📊 全体進捗・目標ペース</h3>
-      <div class="pace-item">
-        <span>全単語数:</span>
-        <span id="pace-total">- 語</span>
-      </div>
-      <div class="pace-item">
-        <span>残りの未習得単語数:</span>
-        <span id="pace-remaining" class="pace-highlight">- 語</span>
-      </div>
-      <div class="pace-item">
-        <span>目標期限日:</span>
-        <span id="pace-date">-</span>
-      </div>
-      <div class="pace-item">
-        <span>学習可能日数 (週5日換算):</span>
-        <span id="pace-days">- 日</span>
-      </div>
-      <div class="pace-target-box">
-        目標: 1日あたり <span id="pace-daily" class="pace-target-val">-</span> 語習得
-      </div>
-    </div>
-
     <button class="btn btn-secondary" style="margin-top: 16px;" onclick="restartCurrentUnit()">🔄 この単元の未修得問題だけを解き直す</button>
     <button class="btn btn-action" style="margin-top: 8px;" onclick="goToNextUnit()">次の単元へ進む ➔</button>
   </div>
@@ -137,7 +129,7 @@
   let currentTargetUnit = "";
   let currentUnitText = "";
   let currentUnitTranslation = "";
-  let paceInfo = null; // GASから受け取る目標ペースデータ
+  let paceInfo = null;
 
   function fetchJSONP(url) {
     return new Promise((resolve, reject) => {
@@ -172,20 +164,19 @@
       document.getElementById('loading').classList.remove('hidden');
       document.getElementById('quiz-area').classList.add('hidden');
       document.getElementById('passage-area').classList.add('hidden');
+      document.getElementById('top-pace-bar').classList.add('hidden');
 
       const quizData = await fetchJSONP(GAS_API_URL);
       allQuestions = quizData.questions || [];
-      paceInfo = quizData.paceInfo || null; // パースデータ保持
+      paceInfo = quizData.paceInfo || null;
 
       if (allQuestions.length === 0) {
         document.getElementById('loading').innerText = "データがありません。";
         return;
       }
 
-      // スプレッドシート内の単元順序リストを作成（登場順）
       unitList = [...new Set(allQuestions.map(q => q.unitId))];
       
-      // 最初は「未修得単語が含まれている最初の単元」を自動検索
       const firstUnfinished = allQuestions.find(q => q.isTarget);
       if (firstUnfinished) {
         currentUnitIndex = unitList.indexOf(firstUnfinished.unitId);
@@ -193,6 +184,10 @@
       } else {
         currentUnitIndex = 0;
       }
+
+      // ノルマヘッダー初期描画
+      updatePaceDisplay();
+      document.getElementById('top-pace-bar').classList.remove('hidden');
 
       loadUnit(currentUnitIndex);
 
@@ -204,7 +199,6 @@
 
   function loadUnit(index) {
     if (index >= unitList.length) {
-      // 全ての単元が終了した場合
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('quiz-area').classList.add('hidden');
       document.getElementById('passage-area').classList.remove('hidden');
@@ -214,16 +208,12 @@
     }
 
     currentTargetUnit = unitList[index];
-
-    // 対象単元の「未修得（isTarget: true）」問題を抽出
     questions = allQuestions.filter(q => q.unitId === currentTargetUnit && q.isTarget);
     
-    // もしその単元の単語が全部完了（0問）している場合は全単語を表示
     if (questions.length === 0) {
       questions = allQuestions.filter(q => q.unitId === currentTargetUnit);
     }
 
-    // 長文・和訳のセットを取得
     const unitSample = allQuestions.find(q => q.unitId === currentTargetUnit && (q.unitText || q.unitTranslation));
     currentUnitText = unitSample ? unitSample.unitText : "";
     currentUnitTranslation = unitSample ? unitSample.unitTranslation : "";
@@ -238,10 +228,9 @@
   }
 
   function goToNextUnit() {
-    // インデックスを確実に1つ進めて次の単元を強制読み込みする
     currentUnitIndex++;
     if (currentUnitIndex >= unitList.length) {
-      currentUnitIndex = 0; // ループして最初に戻る
+      currentUnitIndex = 0;
     }
     loadUnit(currentUnitIndex);
   }
@@ -262,11 +251,9 @@
     const speechBtn = document.getElementById('speech-btn');
 
     if (q.quizType === 'ライティング') {
-      // メイン部分に C列（意味）の内容を表示
       document.getElementById('card-word').innerText = q.meaning;
       speechBtn.style.display = 'none';
 
-      // 例文内の英単語を ( ?? ) に置き換えて表示
       if (q.sentence && q.word) {
         const rawWord = q.word.replace(/^to\s+/i, '').split('/')[0].split('[')[0].trim();
         const escWord = rawWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -280,7 +267,6 @@
       writingHintEl.classList.remove('hidden');
 
     } else {
-      // リーディング時（メイン部分に B列：英単語 を表示）
       document.getElementById('card-word').innerText = q.word;
       speechBtn.style.display = 'inline-block';
 
@@ -328,12 +314,13 @@
         targetInAll.status = "完了";
       }
 
-      // クライアント側の残り単語数と目標ペースを即座に再計算・減算
+      // 「覚えた」瞬間にリアルタイムで残数を減らし上部バーを再描画
       if (paceInfo && paceInfo.remainingWords > 0) {
         paceInfo.remainingWords--;
         if (paceInfo.remainingDays > 0) {
           paceInfo.dailyTarget = Math.ceil(paceInfo.remainingWords / paceInfo.remainingDays);
         }
+        updatePaceDisplay();
       }
 
       try {
@@ -362,19 +349,18 @@
       passageContainer.classList.add('hidden');
     }
 
-    // 目標ペース画面を更新
     updatePaceDisplay();
   }
 
-  // 目標ペースカードの表示更新関数
+  // ノルマ表示更新関数（全画面共通ヘッダーを書き換え）
   function updatePaceDisplay() {
     if (!paceInfo) return;
     
-    document.getElementById('pace-total').innerText = `${paceInfo.totalWords.toLocaleString()} 語`;
-    document.getElementById('pace-remaining').innerText = `${paceInfo.remainingWords.toLocaleString()} 語`;
-    document.getElementById('pace-date').innerText = paceInfo.targetDate || "-";
-    document.getElementById('pace-days').innerText = `${paceInfo.remainingDays} 日`;
-    document.getElementById('pace-daily').innerText = `${paceInfo.dailyTarget}`;
+    document.getElementById('pace-total').innerText = paceInfo.totalWords.toLocaleString();
+    document.getElementById('pace-remaining').innerText = paceInfo.remainingWords.toLocaleString();
+    document.getElementById('pace-date').innerText = paceInfo.targetDate || "未設定";
+    document.getElementById('pace-days').innerText = paceInfo.remainingDays;
+    document.getElementById('pace-daily').innerText = paceInfo.dailyTarget;
   }
 
   function restartCurrentUnit() {
