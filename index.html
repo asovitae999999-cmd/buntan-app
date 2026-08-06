@@ -39,6 +39,7 @@
     .passage-header { font-weight: bold; color: #1a73e8; margin-bottom: 6px; }
     .reading-passage { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: #333; background: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e0e0e0; }
 
+    /* 全画面共通・常時表示ノルマヘッダー */
     .top-pace-bar { background: #f8f9fa; border: 1.5px solid #1a73e8; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; text-align: left; }
     .top-pace-title { font-size: 0.8rem; font-weight: bold; color: #1a73e8; margin-bottom: 6px; display: flex; justify-content: space-between; }
     .top-pace-details { font-size: 0.8rem; color: #555; display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding-bottom: 6px; margin-bottom: 6px; }
@@ -51,6 +52,7 @@
 <div class="app-container">
   <div id="loading">スプレッドシートからデータを読み込み中...</div>
   
+  <!-- 全画面共通で表示されるノルマヘッダー -->
   <div id="top-pace-bar" class="top-pace-bar hidden">
     <div class="top-pace-title">
       <span>📊 全体目標ノルマ（週5日）</span>
@@ -66,6 +68,7 @@
     </div>
   </div>
 
+  <!-- クイズエリア -->
   <div id="quiz-area" class="hidden">
     <h1 id="unit-title">単元: </h1>
     <div class="progress" id="progress-text">1 / 1</div>
@@ -94,6 +97,7 @@
     </div>
   </div>
 
+  <!-- 単元完了・長文画面 -->
   <div id="passage-area" class="hidden">
     <h1>🎉 単元学習完了！</h1>
     
@@ -148,24 +152,17 @@
     });
   }
 
-  // ★ブラウザ制限を回避する確実な音声読み上げ関数
+  // ★シンプル＆安定版：英単語の音声のみ再生
   function speakCurrentWord() {
     if (!questions[currentIndex]) return;
     const q = questions[currentIndex];
-    
-    window.speechSynthesis.cancel(); // 停止
+    if (!q.word) return;
 
-    // 音声エンジン（ja-JP）を使って英語と日本語を一つのストリームで読ませる
-    let textToSpeak = "";
-    if (q.quizType === 'ライティング') {
-      textToSpeak = `${q.meaning}。 ${q.word}`;
-    } else {
-      textToSpeak = `${q.word}。 ${q.meaning}`;
-    }
+    window.speechSynthesis.cancel(); // 前の読み上げをクリア
 
-    const uttr = new SpeechSynthesisUtterance(textToSpeak);
-    uttr.lang = 'ja-JP'; // 日本語エンジンベースで英語（アルファベット）も混ざったテキストとして読ませる
-    uttr.rate = 0.9;   // 少しゆっくりめ
+    const uttr = new SpeechSynthesisUtterance(q.word);
+    uttr.lang = 'en-US';
+    uttr.rate = 0.9; // 聴き取りやすいスピード
 
     window.speechSynthesis.speak(uttr);
   }
@@ -262,7 +259,7 @@
 
     if (q.quizType === 'ライティング') {
       document.getElementById('card-word').innerText = q.meaning;
-      speechBtn.style.display = 'inline-block';
+      speechBtn.style.display = 'none'; // 解答前は隠す
 
       if (q.sentence && q.word) {
         const rawWord = q.word.replace(/^to\s+/i, '').split('/')[0].split('[')[0].trim();
@@ -282,6 +279,9 @@
 
       sentenceEl.innerText = q.sentence || "(例文なし)";
       writingHintEl.classList.add('hidden');
+      
+      // リーディング出題時に英語音声を再生
+      speakCurrentWord();
     }
 
     document.getElementById('answer-meaning').innerText = "";
@@ -290,9 +290,6 @@
     
     document.getElementById('show-answer-btn').classList.remove('hidden');
     document.getElementById('judge-area').classList.add('hidden');
-
-    // 問題表示時に音声を再生
-    speakCurrentWord();
   }
 
   function revealAnswer() {
@@ -310,6 +307,7 @@
     document.getElementById('show-answer-btn').classList.add('hidden');
     document.getElementById('judge-area').classList.remove('hidden');
 
+    // ライティング時は答えを表示したタイミングで英語音声を再生
     document.getElementById('speech-btn').style.display = 'inline-block';
     speakCurrentWord();
   }
@@ -327,6 +325,7 @@
         targetInAll.status = "完了";
       }
 
+      // リアルタイム減算
       if (paceInfo && paceInfo.remainingWords > 0) {
         paceInfo.remainingWords--;
         if (paceInfo.remainingDays > 0) {
